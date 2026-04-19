@@ -1,36 +1,36 @@
-# Lua Simulation Control
+# Lua 仿真控制系统
 
-A C++ project demonstrating Lua script control for simulation engine using sol2 and BehaviorTree.CPP.
+基于 sol2 和 BehaviorTree.CPP 的 C++ 项目，演示如何使用 Lua 脚本控制仿真引擎。
 
-## Overview
+## 项目概述
 
-This project provides a framework for controlling simulation engines through Lua scripts. It includes:
+本项目提供了一个通过 Lua 脚本控制仿真引擎的框架，包括：
 
-- **SimControlInterface**: Abstract interface for simulation control (start, pause, resume, stop, reset)
-- **MockSimController**: A concrete implementation for testing and demonstration
-- **LuaSimBinding**: Lua-C++ binding using sol2 library
-- **Example Lua Scripts**: Demonstrating basic and advanced usage
+- **SimControlInterface**: 仿真控制的抽象接口（启动、暂停、恢复、停止、重置）
+- **MockSimController**: 用于测试和演示的具体实现
+- **LuaSimBinding**: 使用 sol2 库的 Lua-C++ 绑定模块
+- **示例 Lua 脚本**: 演示基础和高级用法
 
-## Features
+## 功能特性
 
-- Control simulation state (start, pause, resume, stop, reset)
-- Query simulation status and time
-- Adjust simulation speed (time scale)
-- Event callbacks (on_start, on_pause, on_resume, on_stop, on_reset)
-- Execute Lua scripts from files or strings
+- 控制仿真状态（启动、暂停、恢复、停止、重置）
+- 查询仿真状态和时间
+- 调整仿真速度（时间倍率）
+- 事件回调（on_start、on_pause、on_resume、on_stop、on_reset）
+- 从文件或字符串执行 Lua 脚本
 
-## Project Structure
+## 项目结构
 
 ```
 TestProject/
 ├── include/
 │   ├── simulation/
-│   │   ├── SimControlInterface.h    # Simulation control interface
-│   │   └── MockSimController.h      # Mock implementation
+│   │   ├── SimControlInterface.h    # 仿真控制接口
+│   │   └── MockSimController.h      # 模拟实现
 │   └── scripting/
-│       └── LuaSimBinding.h          # Lua binding module
+│       └── LuaSimBinding.h          # Lua 绑定模块
 ├── src/
-│   ├── main.cpp                     # Main entry point
+│   ├── main.cpp                     # 主程序入口
 │   ├── simulation/
 │   │   ├── SimControlInterface.cpp
 │   │   ├── MockSimController.cpp
@@ -39,23 +39,23 @@ TestProject/
 │       ├── LuaSimBinding.cpp
 │       └── CMakeLists.txt
 ├── scripts/
-│   ├── example_control.lua          # Basic example
-│   └── advanced_control.lua         # Advanced example with callbacks
+│   ├── example_control.lua          # 基础示例
+│   └── advanced_control.lua         # 高级示例（含回调）
 ├── 3rdparty/
-│   └── lua/                         # Lua 5.1.5 and sol2
+│   └── lua/                         # Lua 5.1.5 和 sol2
 ├── cmake/
-│   └── lua.cmake                    # Lua CMake configuration
-└── CMakeLists.txt                   # Root CMake configuration
+│   └── lua.cmake                    # Lua CMake 配置
+└── CMakeLists.txt                   # 根 CMake 配置
 ```
 
-## Dependencies
+## 依赖项
 
 - CMake 3.10+
-- C++11 compatible compiler
-- Lua 5.1.5 (included in 3rdparty)
-- sol2 v2.17.5 (included in 3rdparty)
+- 支持 C++11 的编译器
+- Lua 5.1.5（已包含在 3rdparty 中）
+- sol2 v2.17.5（已包含在 3rdparty 中）
 
-## Building
+## 构建方法
 
 ### Windows
 
@@ -75,139 +75,139 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
 ```
 
-## Usage
+## 使用方法
 
-### Running the Demo
+### 运行演示
 
 ```bash
-# Run default demo
+# 运行默认演示
 ./Release/my_app
 
-# Run example script
+# 运行示例脚本
 ./Release/my_app scripts/example_control.lua
 
-# Run advanced script
+# 运行高级脚本
 ./Release/my_app scripts/advanced_control.lua
 ```
 
 ### Lua API
 
-The following Lua API is available through the `sim` table:
+通过 `sim` 表提供以下 Lua API：
 
-#### Control Commands
+#### 控制命令
 ```lua
-sim.start()           -- Start simulation
-sim.pause()           -- Pause simulation
-sim.resume()          -- Resume simulation
-sim.stop()            -- Stop simulation
-sim.reset()           -- Reset simulation
+sim.start()           -- 启动仿真
+sim.pause()           -- 暂停仿真
+sim.resume()          -- 恢复仿真
+sim.stop()            -- 停止仿真
+sim.reset()           -- 重置仿真
 ```
 
-#### State Queries
+#### 状态查询
 ```lua
-sim.get_state()       -- Get state as string ("STOPPED", "RUNNING", "PAUSED")
-sim.is_running()      -- Check if running
-sim.is_paused()       -- Check if paused
-sim.is_stopped()      -- Check if stopped
-sim.get_time()        -- Get simulation time
-sim.get_time_step()   -- Get time step
+sim.get_state()       -- 获取状态字符串（"STOPPED"、"RUNNING"、"PAUSED"）
+sim.is_running()      -- 检查是否运行中
+sim.is_paused()       -- 检查是否已暂停
+sim.is_stopped()      -- 检查是否已停止
+sim.get_time()        -- 获取仿真时间
+sim.get_time_step()   -- 获取时间步长
 ```
 
-#### Speed Control
+#### 速度控制
 ```lua
-sim.set_speed(scale)  -- Set time scale (1.0 = real-time)
-sim.get_speed()       -- Get current time scale
+sim.set_speed(scale)  -- 设置时间倍率（1.0 = 实时）
+sim.get_speed()       -- 获取当前时间倍率
 ```
 
-#### Event Callbacks
+#### 事件回调
 ```lua
 sim.on_start(function()
-    print("Simulation started!")
+    print("仿真已启动！")
 end)
 
 sim.on_pause(function()
-    print("Simulation paused!")
+    print("仿真已暂停！")
 end)
 
 sim.on_resume(function()
-    print("Simulation resumed!")
+    print("仿真已恢复！")
 end)
 
 sim.on_stop(function()
-    print("Simulation stopped!")
+    print("仿真已停止！")
 end)
 
 sim.on_reset(function()
-    print("Simulation reset!")
+    print("仿真已重置！")
 end)
 ```
 
-#### Utility Functions
+#### 实用函数
 ```lua
-sleep(seconds)        -- Sleep for specified seconds
+sleep(seconds)        -- 休眠指定秒数
 ```
 
-## Example Script
+## 示例脚本
 
 ```lua
--- Example: Basic simulation control
-print("=== Simulation Control Demo ===")
+-- 示例：基础仿真控制
+print("=== 仿真控制演示 ===")
 
--- Register callbacks
+-- 注册回调
 sim.on_start(function()
-    print("[Callback] Simulation started!")
+    print("[回调] 仿真已启动！")
 end)
 
--- Start simulation
+-- 启动仿真
 sim.start()
 sleep(0.5)
 
--- Check status
-print("State: " .. sim.get_state())
-print("Time: " .. sim.get_time() .. "s")
+-- 检查状态
+print("状态: " .. sim.get_state())
+print("时间: " .. sim.get_time() .. "秒")
 
--- Pause and resume
+-- 暂停和恢复
 sim.pause()
 sim.resume()
 
--- Stop simulation
+-- 停止仿真
 sim.stop()
 
-print("=== Demo finished ===")
+print("=== 演示结束 ===")
 ```
 
-## Architecture
+## 架构说明
 
 ### SimControlInterface
 
-The abstract interface that defines simulation control operations:
+定义仿真控制操作的抽象接口：
 
-- `start()`, `pause()`, `resume()`, `stop()`, `reset()` - Control commands
-- `getState()`, `isRunning()`, `isPaused()`, `isStopped()` - State queries
-- `getSimTime()`, `getTimeStep()` - Time queries
-- `setTimeScale()`, `getTimeScale()` - Speed control
-- Event callback setters
+- `start()`、`pause()`、`resume()`、`stop()`、`reset()` - 控制命令
+- `getState()`、`isRunning()`、`isPaused()`、`isStopped()` - 状态查询
+- `getSimTime()`、`getTimeStep()` - 时间查询
+- `setTimeScale()`、`getTimeScale()` - 速度控制
+- 事件回调设置器
 
 ### MockSimController
 
-A concrete implementation of `SimControlInterface` for testing:
-- Simulates time progression
-- Supports auto-update thread
-- Provides verbose logging
+`SimControlInterface` 的具体实现，用于测试：
+- 模拟时间推进
+- 支持自动更新线程
+- 提供详细日志输出
 
 ### LuaSimBinding
 
-Uses sol2 to bind C++ simulation interface to Lua:
-- Creates `sim` table in Lua global namespace
-- Wraps C++ methods as Lua functions
-- Handles Lua callbacks with error protection
+使用 sol2 将 C++ 仿真接口绑定到 Lua：
+- 在 Lua 全局命名空间创建 `sim` 表
+- 将 C++ 方法包装为 Lua 函数
+- 处理带错误保护的 Lua 回调
 
-## License
+## 许可证
 
-This project is provided as an example implementation. Please check the licenses of included third-party libraries:
-- Lua: MIT License
-- sol2: MIT License
+本项目作为示例实现提供。请查看包含的第三方库的许可证：
+- Lua: MIT 许可证
+- sol2: MIT 许可证
 
-## Contributing
+## 贡献
 
-Feel free to fork and modify this project for your own simulation control needs.
+欢迎 fork 并修改本项目以满足你自己的仿真控制需求。
