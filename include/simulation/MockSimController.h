@@ -5,6 +5,8 @@
 #include <chrono>
 #include <thread>
 #include <iostream>
+#include <map>
+#include <atomic>
 
 namespace simulation {
 
@@ -44,6 +46,14 @@ public:
     void setAutoUpdate(bool enable);
     void setVerbose(bool verbose);
 
+    // Entity management implementation
+    std::string addEntity(const std::string& type, double x, double y, double z);
+    bool removeEntity(const std::string& entityId);
+    bool moveEntity(const std::string& entityId, double x, double y, double z);
+    bool getEntityPosition(const std::string& entityId, double& x, double& y, double& z);
+    std::vector<Entity> getAllEntities();
+    size_t getEntityCount();
+
 private:
     void runSimulationLoop();
     void notifyStart();
@@ -51,6 +61,7 @@ private:
     void notifyResume();
     void notifyStop();
     void notifyReset();
+    std::string generateEntityId();
 
     // State
     volatile int state_;
@@ -72,6 +83,10 @@ private:
 
     // Config
     bool verbose_;
+
+    // Entity storage
+    std::map<std::string, Entity> entities_;
+    std::atomic<uint64_t> nextEntityId_;
 };
 
 } // namespace simulation

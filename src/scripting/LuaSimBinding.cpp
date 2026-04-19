@@ -13,6 +13,16 @@ LuaSimBinding::LuaSimBinding(simulation::SimControlInterface* simInterface)
 }
 
 LuaSimBinding::~LuaSimBinding() {
+    // Clear callbacks to prevent dangling references
+    if (simInterface_) {
+        simInterface_->setOnStartCallback(nullptr);
+        simInterface_->setOnPauseCallback(nullptr);
+        simInterface_->setOnResumeCallback(nullptr);
+        simInterface_->setOnStopCallback(nullptr);
+        simInterface_->setOnResetCallback(nullptr);
+    }
+    // Clear Lua callbacks before destroying Lua state
+    luaCallbacks_.clear();
 }
 
 bool LuaSimBinding::initialize() {
@@ -165,6 +175,70 @@ void LuaSimBinding::registerSimAPI() {
 
     simTable.set_function("get_speed", [this]() -> double {
         return simInterface_ ? simInterface_->getTimeScale() : 1.0;
+    });
+
+    // Entity management
+    simTable.set_function("add_entity", [this](const std::string& type, double x, double y, double z) -> std::string {
+        if (simInterface_) {
+            return simInterface_->addEntity(type, x, y, z);
+        }
+        return "";
+    });
+
+    simTable.set_function("remove_entity", [this](const std::string& entityId) -> bool {
+        if (simInterface_) {
+            return simInterface_->removeEntity(entityId);
+        }
+        return false;
+    });
+
+    simTable.set_function("move_entity", [this](const std::string& entityId, double x, double y, double z) -> bool {
+        if (simInterface_) {
+            return simInterface_->moveEntity(entityId, x, y, z);
+        }
+        return false;
+    });
+
+    simTable.set_function("get_entity_position", [this](const std::string& entityId) -> sol::optional<sol::table> {
+        if (!simInterface_) {
+            return sol::nullopt;
+        }
+        
+        double x, y, z;
+        if (simInterface_->getEntityPosition(entityId, x, y, z)) {
+            sol::table pos = luaState_->create_table();
+            pos["x"] = x;
+            pos["y"] = y;
+            pos["z"] = z;
+            return pos;
+        }
+        return sol::nullopt;
+    });
+
+    simTable.set_function("get_all_entities", [this]() -> sol::table {
+        sol::table entities = luaState_->create_table();
+        
+        if (simInterface_) {
+            auto entityList = simInterface_->getAllEntities();
+            for (size_t i = 0; i < entityList.size(); ++i) {
+                sol::table entity = luaState_->create_table();
+                entity["id"] = entityList[i].id;
+                entity["type"] = entityList[i].type;
+                entity["x"] = entityList[i].x;
+                entity["y"] = entityList[i].y;
+                entity["z"] = entityList[i].z;
+                entities[i + 1] = entity;  // Lua arrays are 1-indexed
+            }
+        }
+        
+        return entities;
+    });
+
+    simTable.set_function("get_entity_count", [this]() -> int {
+        if (simInterface_) {
+            return static_cast<int>(simInterface_->getEntityCount());
+        }
+        return 0;
     });
 
     // Event callbacks

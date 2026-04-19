@@ -1,0 +1,30 @@
+# Checklist
+
+- [x] SimControlInterface.h 中定义了 Entity 结构体
+- [x] SimControlInterface.h 中声明了 addEntity 纯虚函数
+- [x] SimControlInterface.h 中声明了 removeEntity 纯虚函数
+- [x] SimControlInterface.h 中声明了 moveEntity 纯虚函数
+- [x] SimControlInterface.h 中声明了 getEntityPosition 纯虚函数
+- [x] SimControlInterface.h 中声明了 getAllEntities 纯虚函数
+- [x] SimControlInterface.h 中声明了 getEntityCount 纯虚函数
+- [x] MockSimController.h 中添加了实体存储容器成员
+- [x] MockSimController.cpp 中实现了 addEntity 方法
+- [x] MockSimController.cpp 中实现了 removeEntity 方法
+- [x] MockSimController.cpp 中实现了 moveEntity 方法
+- [x] MockSimController.cpp 中实现了 getEntityPosition 方法
+- [x] MockSimController.cpp 中实现了 getAllEntities 方法
+- [x] MockSimController.cpp 中实现了 getEntityCount 方法
+- [x] MockSimController.cpp 中实现了实体ID生成逻辑
+- [x] LuaSimBinding.cpp 中注册了 sim.add_entity 函数
+- [x] LuaSimBinding.cpp 中注册了 sim.remove_entity 函数
+- [x] LuaSimBinding.cpp 中注册了 sim.move_entity 函数
+- [x] LuaSimBinding.cpp 中注册了 sim.get_entity_position 函数
+- [x] LuaSimBinding.cpp 中注册了 sim.get_all_entities 函数
+- [x] LuaSimBinding.cpp 中注册了 sim.get_entity_count 函数
+- [x] scripts/entity_control_test.lua 文件已创建
+- [x] 测试脚本包含添加实体功能测试
+- [x] 测试脚本包含移动实体功能测试
+- [x] 测试脚本包含位置验证功能测试
+- [x] 测试脚本包含删除实体功能测试
+- [x] 测试脚本包含实体列表查询功能测试
+- [x] 项目能够成功编译

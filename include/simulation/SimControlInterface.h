@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace simulation {
 
@@ -15,6 +16,19 @@ enum SimState {
 
 // Event callback type
 typedef std::function<void()> SimEventCallback;
+
+// Entity structure for simulation entities
+struct Entity {
+    std::string id;
+    std::string type;
+    double x;
+    double y;
+    double z;
+    
+    Entity() : x(0.0), y(0.0), z(0.0) {}
+    Entity(const std::string& entityId, const std::string& entityType, double px, double py, double pz)
+        : id(entityId), type(entityType), x(px), y(py), z(pz) {}
+};
 
 class SimControlInterface {
 public:
@@ -45,6 +59,14 @@ public:
     virtual void setOnResumeCallback(SimEventCallback callback) = 0;
     virtual void setOnStopCallback(SimEventCallback callback) = 0;
     virtual void setOnResetCallback(SimEventCallback callback) = 0;
+
+    // Entity management
+    virtual std::string addEntity(const std::string& type, double x, double y, double z) = 0;
+    virtual bool removeEntity(const std::string& entityId) = 0;
+    virtual bool moveEntity(const std::string& entityId, double x, double y, double z) = 0;
+    virtual bool getEntityPosition(const std::string& entityId, double& x, double& y, double& z) = 0;
+    virtual std::vector<Entity> getAllEntities() = 0;
+    virtual size_t getEntityCount() = 0;
 
     // Utility
     static std::string stateToString(SimState state);

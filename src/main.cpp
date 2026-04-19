@@ -109,5 +109,10 @@ int main(int argc, char* argv[]) {
     std::cout << "    Program finished normally" << std::endl;
     std::cout << "========================================" << std::endl;
 
+    // Explicitly destroy Lua binding before sim controller to avoid
+    // dangling callbacks
+    luaBinding.reset();
+    simController.reset();
+
     return 0;
 }
