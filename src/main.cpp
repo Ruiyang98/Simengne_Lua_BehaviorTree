@@ -2,6 +2,9 @@
 #include <memory>
 #include <thread>
 #include <chrono>
+#include <algorithm>
+#include <cctype>
+#include <string>
 
 #include "simulation/SimControlInterface.h"
 #include "simulation/MockSimController.h"
@@ -10,14 +13,85 @@
 using namespace simulation;
 using namespace scripting;
 
-void printUsage() {
-    std::cout << "Usage: my_app [script file]" << std::endl;
-    std::cout << "  Example: my_app scripts/example_control.lua" << std::endl;
-    std::cout << "           my_app scripts/advanced_control.lua" << std::endl;
-    std::cout << "           my_app (no args for default demo)" << std::endl;
+// Trim whitespace from both ends of a string
+std::string trim(const std::string& str) {
+    size_t first = str.find_first_not_of(" \t\n\r");
+    if (first == std::string::npos) return "";
+    size_t last = str.find_last_not_of(" \t\n\r");
+    return str.substr(first, (last - first + 1));
 }
 
-int main(int argc, char* argv[]) {
+// Convert string to lowercase
+std::string toLower(const std::string& str) {
+    std::string result = str;
+    std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+    return result;
+}
+
+void printUsage() {
+    std::cout << "Available commands:" << std::endl;
+    std::cout << "  help              - Show this help message" << std::endl;
+    std::cout << "  quit/exit         - Exit the program" << std::endl;
+    std::cout << "  clear             - Clear screen" << std::endl;
+    std::cout << "  <script_path>     - Execute a Lua script file" << std::endl;
+    std::cout << std::endl;
+    std::cout << "Examples:" << std::endl;
+    std::cout << "  LuaSim> scripts/example_control.lua" << std::endl;
+    std::cout << "  LuaSim> scripts/entity_control_test.lua" << std::endl;
+}
+
+void runInteractiveMode(LuaSimBinding* luaBinding) {
+    std::cout << "Entering interactive mode. Type 'help' for usage, 'quit' to exit." << std::endl;
+    std::cout << std::endl;
+
+    std::string input;
+    while (true) {
+        std::cout << "LuaSim> ";
+        std::getline(std::cin, input);
+
+        // Trim input
+        input = trim(input);
+
+        // Skip empty input
+        if (input.empty()) {
+            continue;
+        }
+
+        // Convert to lowercase for command comparison
+        std::string cmd = toLower(input);
+
+        // Handle commands
+        if (cmd == "quit" || cmd == "exit") {
+            std::cout << "Goodbye!" << std::endl;
+            break;
+        }
+        else if (cmd == "help") {
+            printUsage();
+        }
+        else if (cmd == "clear") {
+            // Clear screen (platform independent way)
+            std::cout << "\033[2J\033[1;1H";
+        }
+        else {
+            // Treat input as script path
+            std::cout << "Executing script: " << input << std::endl;
+            std::cout << "----------------------------------------" << std::endl;
+
+            if (luaBinding->executeScript(input)) {
+                std::cout << "----------------------------------------" << std::endl;
+                std::cout << "OK: Script executed successfully" << std::endl;
+            }
+            else {
+                std::cout << "----------------------------------------" << std::endl;
+                std::cerr << "ERROR: Script execution failed: " << luaBinding->getLastError() << std::endl;
+            }
+        }
+
+        std::cout << std::endl;
+    }
+}
+
+int main() {
     std::cout << "========================================" << std::endl;
     std::cout << "    Lua Simulation Control Demo" << std::endl;
     std::cout << "========================================" << std::endl;
@@ -26,83 +100,21 @@ int main(int argc, char* argv[]) {
     // Create simulation controller
     std::unique_ptr<MockSimController> simController(new MockSimController());
     simController->setVerbose(true);
-    
+
     // Create Lua binding
     std::unique_ptr<LuaSimBinding> luaBinding(new LuaSimBinding(simController.get()));
-    
+
     // Initialize Lua environment
     if (!luaBinding->initialize()) {
         std::cerr << "Lua initialization failed: " << luaBinding->getLastError() << std::endl;
         return 1;
     }
-    
+
     std::cout << "OK: Lua environment initialized" << std::endl;
     std::cout << std::endl;
 
-    // Execute based on arguments
-    if (argc > 1) {
-        // Execute specified Lua script file
-        std::string scriptPath = argv[1];
-        std::cout << "Executing script: " << scriptPath << std::endl;
-        std::cout << "----------------------------------------" << std::endl;
-        
-        if (luaBinding->executeScript(scriptPath)) {
-            std::cout << "----------------------------------------" << std::endl;
-            std::cout << "OK: Script executed successfully" << std::endl;
-        } else {
-            std::cout << "----------------------------------------" << std::endl;
-            std::cerr << "ERROR: Script execution failed: " << luaBinding->getLastError() << std::endl;
-            return 1;
-        }
-    } else {
-        // Execute default demo
-        std::cout << "Running default demo..." << std::endl;
-        std::cout << "----------------------------------------" << std::endl;
-        
-        // Embedded default Lua script
-        const char* defaultScript = 
-            "print('=== Lua Simulation Control Demo ===')\n"
-            "print('')\n"
-            "print('1. Check initial state')\n"
-            "print('   State: ' .. sim.get_state())\n"
-            "print('   Time: ' .. sim.get_time() .. 's')\n"
-            "print('')\n"
-            "sim.on_start(function()\n"
-            "    print('   [Callback] Simulation started!')\n"
-            "end)\n"
-            "sim.on_stop(function()\n"
-            "    print('   [Callback] Simulation stopped!')\n"
-            "end)\n"
-            "print('2. Start simulation')\n"
-            "sim.start()\n"
-            "sleep(0.5)\n"
-            "print('   Time after 0.5s: ' .. string.format('%.2f', sim.get_time()) .. 's')\n"
-            "print('')\n"
-            "print('3. Pause and resume')\n"
-            "sim.pause()\n"
-            "print('   State after pause: ' .. sim.get_state())\n"
-            "sim.resume()\n"
-            "print('   State after resume: ' .. sim.get_state())\n"
-            "sleep(0.3)\n"
-            "print('')\n"
-            "print('4. Stop simulation')\n"
-            "sim.stop()\n"
-            "print('   Final time: ' .. string.format('%.2f', sim.get_time()) .. 's')\n"
-            "print('')\n"
-            "print('=== Demo finished ===')\n";
-        
-        if (luaBinding->executeString(defaultScript)) {
-            std::cout << "----------------------------------------" << std::endl;
-            std::cout << "OK: Demo executed successfully" << std::endl;
-        } else {
-            std::cout << "----------------------------------------" << std::endl;
-            std::cerr << "ERROR: Demo execution failed: " << luaBinding->getLastError() << std::endl;
-            return 1;
-        }
-        
-        std::cout << std::endl;
-        printUsage();
-    }
+    // Run interactive mode
+    runInteractiveMode(luaBinding.get());
 
     std::cout << std::endl;
     std::cout << "========================================" << std::endl;
