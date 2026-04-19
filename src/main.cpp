@@ -58,6 +58,7 @@ void printUsage() {
     std::cout << "  bt <xml_file> [tree_name] [-e <id>]  - Execute behavior tree from XML" << std::endl;
     std::cout << "  bt list                     - List available behavior trees" << std::endl;
     std::cout << "  lua <script_path>           - Execute a Lua script file" << std::endl;
+    std::cout << "  lua-bt                      - List Lua+BT integration examples" << std::endl;
     std::cout << std::endl;
     std::cout << "Examples:" << std::endl;
     std::cout << "  > bt bt_xml/square_path_composite.xml SquarePathComposite" << std::endl;
@@ -65,6 +66,8 @@ void printUsage() {
     std::cout << "  > bt bt_xml/square_path.xml SquarePath -e npc_001" << std::endl;
     std::cout << "  > entity add npc 10 20" << std::endl;
     std::cout << "  > lua scripts/example_control.lua" << std::endl;
+    std::cout << "  > lua scripts/bt_control_example.lua" << std::endl;
+    std::cout << "  > lua scripts/bt_advanced_example.lua" << std::endl;
 }
 
 // Execute behavior tree from command
@@ -170,6 +173,33 @@ void listBehaviorTrees() {
     std::cout << "  > bt bt_xml/square_path.xml SquarePath -e <entity_id>" << std::endl;
 }
 
+// List Lua+BT integration examples
+void listLuaBTExamples() {
+    std::cout << "Lua + Behavior Tree Integration Examples:" << std::endl;
+    std::cout << std::endl;
+    std::cout << "  1. scripts/bt_control_example.lua" << std::endl;
+    std::cout << "     - Basic behavior tree loading and execution from Lua" << std::endl;
+    std::cout << "     - Tree status checking" << std::endl;
+    std::cout << std::endl;
+    std::cout << "  2. scripts/bt_blackboard_example.lua" << std::endl;
+    std::cout << "     - Blackboard read/write operations" << std::endl;
+    std::cout << "     - Passing parameters to behavior trees" << std::endl;
+    std::cout << "     - Data type conversion (string, number, bool)" << std::endl;
+    std::cout << std::endl;
+    std::cout << "  3. scripts/bt_custom_node_example.lua" << std::endl;
+    std::cout << "     - Registering Lua functions as action nodes" << std::endl;
+    std::cout << "     - Registering Lua functions as condition nodes" << std::endl;
+    std::cout << "     - Combining C++ and Lua nodes" << std::endl;
+    std::cout << std::endl;
+    std::cout << "  4. scripts/bt_advanced_example.lua" << std::endl;
+    std::cout << "     - Comprehensive integration demonstration" << std::endl;
+    std::cout << "     - Multi-entity coordination" << std::endl;
+    std::cout << "     - Dynamic blackboard manipulation" << std::endl;
+    std::cout << std::endl;
+    std::cout << "Usage: lua <script_path>" << std::endl;
+    std::cout << "  > lua scripts/bt_control_example.lua" << std::endl;
+}
+
 // Handle behavior tree command
 // Usage: bt <xml_file> [tree_name] [-e <entity_id>]
 //        bt <xml_file> [-e <entity_id>] [tree_name]
@@ -250,6 +280,9 @@ void runInteractiveMode(LuaSimBinding* luaBinding) {
                 listEntities();
             }
         }
+        else if (cmd == "lua-bt") {
+            listLuaBTExamples();
+        }
         else if (cmd == "lua" && args.size() > 1) {
             // Execute Lua script
             std::string scriptPath = args[1];
@@ -305,6 +338,14 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "OK: Lua environment initialized" << std::endl;
+
+    // Initialize Lua-BehaviorTree bridge
+    if (!luaBinding->initializeBehaviorTree(&g_btExecutor->getFactory())) {
+        std::cerr << "WARNING: Lua-BT bridge initialization failed: " << luaBinding->getLastError() << std::endl;
+        std::cout << "OK: Lua environment ready (without BT integration)" << std::endl;
+    } else {
+        std::cout << "OK: Lua-BehaviorTree bridge initialized" << std::endl;
+    }
     std::cout << std::endl;
 
     // Run interactive mode

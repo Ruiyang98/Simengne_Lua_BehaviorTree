@@ -12,7 +12,6 @@ add_library(bt_nodes STATIC ${BT_NODES_SOURCES})
 
 target_include_directories(bt_nodes PUBLIC
     ${CMAKE_SOURCE_DIR}/include
-    #${CMAKE_SOURCE_DIR}/3rdparty/BehaviorTree.CPP/BehaviorTree.CPP-3.8/include
 )
 
 target_link_libraries(bt_nodes PUBLIC

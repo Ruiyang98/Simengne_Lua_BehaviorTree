@@ -1,4 +1,5 @@
 #include "scripting/LuaSimBinding.h"
+#include "scripting/LuaBehaviorTreeBridge.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -327,6 +328,26 @@ void LuaSimBinding::registerUtilityFunctions() {
 
 void LuaSimBinding::setupCallbacks() {
     // Callbacks are set up in registerSimAPI
+}
+
+bool LuaSimBinding::initializeBehaviorTree(BT::BehaviorTreeFactory* factory) {
+    if (!initialized_) {
+        lastError_ = "Lua environment not initialized";
+        return false;
+    }
+    
+    if (!factory) {
+        lastError_ = "BT factory is null";
+        return false;
+    }
+    
+    try {
+        btBridge_ = std::make_unique<LuaBehaviorTreeBridge>(luaState_.get(), factory);
+        return btBridge_->initialize();
+    } catch (const std::exception& e) {
+        lastError_ = std::string("Failed to initialize BT bridge: ") + e.what();
+        return false;
+    }
 }
 
 } // namespace scripting

@@ -2,6 +2,7 @@
 #define LUA_SIM_BINDING_H
 
 #include "simulation/SimControlInterface.h"
+#include <behaviortree_cpp_v3/bt_factory.h>
 #include <sol.hpp>
 #include <memory>
 #include <string>
@@ -9,6 +10,9 @@
 #include <vector>
 
 namespace scripting {
+
+// Forward declaration
+class LuaBehaviorTreeBridge;
 
 class LuaSimBinding {
 public:
@@ -21,6 +25,13 @@ public:
     sol::state& getState();
     bool isInitialized() const;
     const std::string& getLastError() const;
+    
+    // Get behavior tree bridge
+    LuaBehaviorTreeBridge* getBehaviorTreeBridge() const { return btBridge_.get(); }
+    
+    // Initialize behavior tree integration (must be called after initialize())
+    bool initializeBehaviorTree(BT::BehaviorTreeFactory* factory);
+    bool isBehaviorTreeInitialized() const { return btBridge_ != nullptr; }
 
 private:
     void registerFunctions();
@@ -30,6 +41,7 @@ private:
 
     simulation::SimControlInterface* simInterface_;
     std::unique_ptr<sol::state> luaState_;
+    std::unique_ptr<LuaBehaviorTreeBridge> btBridge_;
     bool initialized_;
     std::string lastError_;
     std::vector<sol::protected_function> luaCallbacks_;

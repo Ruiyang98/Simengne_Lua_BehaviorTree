@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<root main_tree_to_execute="LuaTestTree">
+
+    <!-- 使用 Lua 自定义节点的行为树示例 -->
+    <BehaviorTree ID="LuaTestTree">
+        <Sequence name="lua_test_sequence">
+            <!-- 条件检查：是否有实体存在 -->
+            <LuaCondition lua_node_name="LuaHasEntities" />
+
+            <!-- 动作：检查健康状态 -->
+            <LuaAction lua_node_name="LuaCheckHealth" />
+
+            <!-- 条件检查：是否有 NPC -->
+            <LuaCondition lua_node_name="LuaHasNPC" />
+
+            <!-- 动作：执行巡逻 -->
+            <LuaAction lua_node_name="LuaPatrol" />
+        </Sequence>
+    </BehaviorTree>
+
+    <!-- 简化版：只检查实体和健康 -->
+    <BehaviorTree ID="LuaTestTreeSimple">
+        <Sequence name="lua_test_sequence_simple">
+            <LuaCondition lua_node_name="LuaHasEntities" />
+            <LuaAction lua_node_name="LuaCheckHealth" />
+        </Sequence>
+    </BehaviorTree>
+
+    <!-- 复杂示例：混合使用 C++ 节点和 Lua 节点 -->
+    <BehaviorTree ID="LuaMixedTree">
+        <Sequence name="mixed_sequence">
+            <!-- Lua 条件节点 -->
+            <LuaCondition lua_node_name="LuaHasEntities" />
+
+            <!-- C++ 动作节点 -->
+            <CheckEntityExists entity_id="{entity_id}" />
+
+            <!-- Lua 动作节点 -->
+            <LuaAction lua_node_name="LuaCheckHealth" />
+
+            <!-- C++ 动作节点 -->
+            <MoveToPoint entity_id="{entity_id}" x="10" y="10" z="0" />
+
+            <!-- Lua 动作节点 -->
+            <LuaAction lua_node_name="LuaPatrol" />
+        </Sequence>
+    </BehaviorTree>
+
+</root>
