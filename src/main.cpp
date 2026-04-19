@@ -55,19 +55,20 @@ void printUsage() {
     std::cout << "  clear                       - Clear screen" << std::endl;
     std::cout << "  entity                      - List all entities" << std::endl;
     std::cout << "  entity add <type> <x> <y>   - Add a new entity" << std::endl;
-    std::cout << "  bt <xml_file> [tree_name]   - Execute behavior tree from XML" << std::endl;
+    std::cout << "  bt <xml_file> [tree_name] [-e <id>]  - Execute behavior tree from XML" << std::endl;
     std::cout << "  bt list                     - List available behavior trees" << std::endl;
-    std::cout << "  <script_path>               - Execute a Lua script file" << std::endl;
+    std::cout << "  lua <script_path>           - Execute a Lua script file" << std::endl;
     std::cout << std::endl;
     std::cout << "Examples:" << std::endl;
     std::cout << "  > bt bt_xml/square_path_composite.xml SquarePathComposite" << std::endl;
     std::cout << "  > bt bt_xml/square_path.xml SquarePath" << std::endl;
+    std::cout << "  > bt bt_xml/square_path.xml SquarePath -e npc_001" << std::endl;
     std::cout << "  > entity add npc 10 20" << std::endl;
-    std::cout << "  > scripts/example_control.lua" << std::endl;
+    std::cout << "  > lua scripts/example_control.lua" << std::endl;
 }
 
 // Execute behavior tree from command
-bool executeBehaviorTree(const std::string& xmlFile, const std::string& treeName) {
+bool executeBehaviorTree(const std::string& xmlFile, const std::string& treeName, const std::string& entityId = "") {
     if (!g_btExecutor) {
         std::cerr << "ERROR: Behavior tree executor not initialized" << std::endl;
         return false;
@@ -86,16 +87,29 @@ bool executeBehaviorTree(const std::string& xmlFile, const std::string& treeName
     // Create blackboard and set parameters
     auto blackboard = BT::Blackboard::create();
     
-    // Try to get an existing entity
-    auto entities = g_simController->getAllEntities();
-    if (!entities.empty()) {
-        blackboard->set(BlackboardKeys::ENTITY_ID, entities[0].id);
-        std::cout << "INFO: Using existing entity: " << entities[0].id << std::endl;
+    // Use specified entity ID or find/create one
+    if (!entityId.empty()) {
+        // Verify the entity exists
+        double x, y, z;
+        if (g_simController->getEntityPosition(entityId, x, y, z)) {
+            blackboard->set(BlackboardKeys::ENTITY_ID, entityId);
+            std::cout << "INFO: Using specified entity: " << entityId << std::endl;
+        } else {
+            std::cerr << "ERROR: Entity not found: " << entityId << std::endl;
+            return false;
+        }
     } else {
-        // Create a test entity
-        std::string newId = g_simController->addEntity("npc", 0.0, 0.0, 0.0);
-        blackboard->set(BlackboardKeys::ENTITY_ID, newId);
-        std::cout << "INFO: Created test entity: " << newId << std::endl;
+        // Try to get an existing entity
+        auto entities = g_simController->getAllEntities();
+        if (!entities.empty()) {
+            blackboard->set(BlackboardKeys::ENTITY_ID, entities[0].id);
+            std::cout << "INFO: Using existing entity: " << entities[0].id << std::endl;
+        } else {
+            // Create a test entity
+            std::string newId = g_simController->addEntity("npc", 0.0, 0.0, 0.0);
+            blackboard->set(BlackboardKeys::ENTITY_ID, newId);
+            std::cout << "INFO: Created test entity: " << newId << std::endl;
+        }
     }
     
     std::cout << std::endl;
@@ -128,15 +142,15 @@ void listEntities() {
 
 // Add a new entity
 void addEntity(const std::vector<std::string>& args) {
-    if (args.size() < 4) {
+    if (args.size() < 5) {
         std::cerr << "Usage: entity add <type> <x> <y> [z]" << std::endl;
         return;
     }
     
-    std::string type = args[1];
-    double x = std::stod(args[2]);
-    double y = std::stod(args[3]);
-    double z = (args.size() > 4) ? std::stod(args[4]) : 0.0;
+    std::string type = args[2];
+    double x = std::stod(args[3]);
+    double y = std::stod(args[4]);
+    double z = (args.size() > 5) ? std::stod(args[5]) : 0.0;
     
     std::string id = g_simController->addEntity(type, x, y, z);
     std::cout << "Created entity: " << id << " at (" << x << ", " << y << ", " << z << ")" << std::endl;
@@ -153,9 +167,12 @@ void listBehaviorTrees() {
     std::cout << "Example usage:" << std::endl;
     std::cout << "  > bt bt_xml/square_path_composite.xml SquarePathComposite" << std::endl;
     std::cout << "  > bt bt_xml/square_path.xml SquarePath" << std::endl;
+    std::cout << "  > bt bt_xml/square_path.xml SquarePath -e <entity_id>" << std::endl;
 }
 
 // Handle behavior tree command
+// Usage: bt <xml_file> [tree_name] [-e <entity_id>]
+//        bt <xml_file> [-e <entity_id>] [tree_name]
 void handleBtCommand(const std::vector<std::string>& args) {
     if (args.size() == 1 || (args.size() == 2 && args[1] == "list")) {
         listBehaviorTrees();
@@ -163,14 +180,26 @@ void handleBtCommand(const std::vector<std::string>& args) {
     }
     
     if (args.size() < 2) {
-        std::cerr << "Usage: bt <xml_file> [tree_name]" << std::endl;
+        std::cerr << "Usage: bt <xml_file> [tree_name] [-e <entity_id>]" << std::endl;
         return;
     }
     
     std::string xmlFile = args[1];
-    std::string treeName = (args.size() > 2) ? args[2] : "MainTree";
+    std::string treeName = "MainTree";
+    std::string entityId = "";
     
-    executeBehaviorTree(xmlFile, treeName);
+    // Parse remaining arguments
+    for (size_t i = 2; i < args.size(); ++i) {
+        if ((args[i] == "-e" || args[i] == "--entity") && i + 1 < args.size()) {
+            entityId = args[i + 1];
+            ++i; // Skip the next argument as it's the entity ID
+        } else if (treeName == "MainTree") {
+            // First non-option argument is treated as tree name
+            treeName = args[i];
+        }
+    }
+    
+    executeBehaviorTree(xmlFile, treeName, entityId);
 }
 
 void runInteractiveMode(LuaSimBinding* luaBinding) {
@@ -237,18 +266,7 @@ void runInteractiveMode(LuaSimBinding* luaBinding) {
             }
         }
         else {
-            // Treat input as Lua script path
-            std::cout << "Executing Lua script: " << input << std::endl;
-            std::cout << "----------------------------------------" << std::endl;
-
-            if (luaBinding->executeScript(input)) {
-                std::cout << "----------------------------------------" << std::endl;
-                std::cout << "OK: Script executed successfully" << std::endl;
-            }
-            else {
-                std::cout << "----------------------------------------" << std::endl;
-                std::cerr << "ERROR: Script execution failed: " << luaBinding->getLastError() << std::endl;
-            }
+            std::cout << "Error input: " << input << std::endl;
         }
 
         std::cout << std::endl;
