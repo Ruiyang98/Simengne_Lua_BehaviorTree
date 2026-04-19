@@ -7,9 +7,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 包含 Lua 配置
 include(cmake/lua.cmake)
 
+# 包含 BehaviorTree.CPP 配置
+include(cmake/BehaviorTree.cmake)
+
 # 添加子目录
 add_subdirectory(src/simulation)
 add_subdirectory(src/scripting)
+add_subdirectory(src/behaviortree)
 
 # 创建可执行文件
 add_executable(my_app src/main.cpp)
@@ -18,10 +22,11 @@ add_executable(my_app src/main.cpp)
 target_link_libraries(my_app PRIVATE
     simulation
     script_system
+    bt_nodes
 )
 
 # 链接 Lua
-link_lua(my_app)
+# link_lua(my_app)
 
 # 复制脚本文件到构建目录
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/scripts 

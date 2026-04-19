@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<root main_tree_to_execute="WaypointPatrol">
+    
+    <!-- 巡逻路径：在多个巡逻点之间循环移动 -->
+    <BehaviorTree ID="WaypointPatrol">
+        <Sequence name="patrol_sequence">
+            <CheckEntityExists entity_id="{entity_id}" />
+            
+            <!-- 巡逻点序列：A -> B -> C -> D -> A -->
+            <FollowPath entity_id="{entity_id}" 
+                        waypoints="0,0,0;20,0,0;20,20,0;10,30,0;0,20,0;0,0,0" 
+                        delay_ms="400" />
+        </Sequence>
+    </BehaviorTree>
+    
+    <!-- 三角形巡逻路径 -->
+    <BehaviorTree ID="TrianglePatrol">
+        <Sequence name="triangle_patrol_sequence">
+            <CheckEntityExists entity_id="{entity_id}" />
+            
+            <!-- 三角形路径 -->
+            <FollowPath entity_id="{entity_id}" 
+                        waypoints="0,0,0;30,0,0;15,26,0;0,0,0" 
+                        delay_ms="500" />
+        </Sequence>
+    </BehaviorTree>
+    
+    <!-- 8字形巡逻路径 -->
+    <BehaviorTree ID="FigureEightPatrol">
+        <Sequence name="figure_eight_sequence">
+            <CheckEntityExists entity_id="{entity_id}" />
+            
+            <!-- 8字形路径 -->
+            <FollowPath entity_id="{entity_id}" 
+                        waypoints="0,0,0;10,10,0;20,0,0;10,-10,0;0,0,0;10,10,0;20,0,0;10,-10,0;0,0,0" 
+                        delay_ms="300" />
+        </Sequence>
+    </BehaviorTree>
+    
+</root>

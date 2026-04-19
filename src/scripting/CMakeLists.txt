@@ -11,8 +11,8 @@ add_library(script_system STATIC ${SCRIPTING_SOURCES})
 # 设置包含目录
 target_include_directories(script_system PUBLIC
     ${CMAKE_SOURCE_DIR}/include
-    ${LUA_INCLUDE_DIR}
-    ${SOL2_INCLUDE_DIR}
+    #${LUA_INCLUDE_DIR}
+    #${SOL2_INCLUDE_DIR}
 )
 
 # 设置 C++ 标准
@@ -20,7 +20,8 @@ target_compile_features(script_system PUBLIC cxx_std_11)
 
 # 链接 Lua 库
 target_link_libraries(script_system PUBLIC
-    ${LUA_LIBRARY}
+    #${LUA_LIBRARY}
+    lua::lua
     simulation
 )
 

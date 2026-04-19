@@ -74,7 +74,7 @@ macro(link_lua target)
 
     # 链接 Lua 库
     target_link_libraries(${target} ${_visibility}
-        ${LUA_LIBRARY}
+        lua::lua
     )
 
     # 添加编译定义（Windows 下）
@@ -102,12 +102,12 @@ macro(link_lua_c target)
         message(FATAL_ERROR "link_lua_c: target '${target}' does not exist")
     endif()
 
-    target_include_directories(${target} ${_visibility}
-        ${LUA_INCLUDE_DIR}
-    )
+    #target_include_directories(${target} ${_visibility}
+    #    ${LUA_INCLUDE_DIR}
+    #)
 
     target_link_libraries(${target} ${_visibility}
-        ${LUA_LIBRARY}
+        lua::lua
     )
 
     if(MSVC)
@@ -117,26 +117,4 @@ macro(link_lua_c target)
     endif()
 
     message(STATUS "Linked Lua C library to '${target}' (${_visibility})")
-endmacro()
-
-#
-# 宏：仅添加 sol2 头文件路径
-#
-# 用法：link_sol2(<target> [VISIBILITY])
-#
-macro(link_sol2 target)
-    set(_visibility "PRIVATE")
-    if(${ARGC} GREATER 1)
-        set(_visibility "${ARGV1}")
-    endif()
-
-    if(NOT TARGET ${target})
-        message(FATAL_ERROR "link_sol2: target '${target}' does not exist")
-    endif()
-
-    target_include_directories(${target} ${_visibility}
-        ${SOL2_INCLUDE_DIR}
-    )
-
-    message(STATUS "Linked sol2 to '${target}' (${_visibility})")
 endmacro()
