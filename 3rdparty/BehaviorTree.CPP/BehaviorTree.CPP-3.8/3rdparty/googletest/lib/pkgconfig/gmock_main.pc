@@ -1,0 +1,10 @@
+libdir=D:/workspace/behaviortree/TestProject/3rdparty/BehaviorTree.CPP/BehaviorTree.CPP-3.8/3rdparty/googletest/lib
+includedir=D:/workspace/behaviortree/TestProject/3rdparty/BehaviorTree.CPP/BehaviorTree.CPP-3.8/3rdparty/googletest/include
+
+Name: gmock_main
+Description: GoogleMock (with main() function)
+Version: 1.17.0
+URL: https://github.com/google/googletest
+Requires: gmock = 1.17.0
+Libs: -L${libdir} -lgmock_main 
+Cflags: -I${includedir} -DGTEST_HAS_PTHREAD=0

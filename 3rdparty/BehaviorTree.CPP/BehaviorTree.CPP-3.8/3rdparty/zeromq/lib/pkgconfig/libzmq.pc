@@ -1,0 +1,12 @@
+prefix=D:\workspace\behaviortree\TestProject\3rdparty\BehaviorTree.CPP\BehaviorTree.CPP-3.8\3rdparty\zeromq
+exec_prefix=D:\workspace\behaviortree\TestProject\3rdparty\BehaviorTree.CPP\BehaviorTree.CPP-3.8\3rdparty\zeromq
+libdir=D:\workspace\behaviortree\TestProject\3rdparty\BehaviorTree.CPP\BehaviorTree.CPP-3.8\3rdparty\zeromq/lib
+includedir=D:\workspace\behaviortree\TestProject\3rdparty\BehaviorTree.CPP\BehaviorTree.CPP-3.8\3rdparty\zeromq/include
+
+Name: libzmq
+Description: 0MQ c++ library
+Version: 4.3.5
+Libs: -L${libdir} -lzmq
+Libs.private: -lstdc++ 
+Requires.private: 
+Cflags: -I${includedir} 
