@@ -1,6 +1,7 @@
 #include "behaviortree/BehaviorTreeExecutor.h"
 #include "behaviortree/SimControllerPtr.h"
 #include "behaviortree/MoveToPoint.h"
+#include "behaviortree/AsyncMoveToPoint.h"
 #include "behaviortree/FollowPath.h"
 #include "behaviortree/CheckEntityExists.h"
 #include <iostream>
@@ -58,17 +59,21 @@ bool BehaviorTreeExecutor::initialize() {
 }
 
 void BehaviorTreeExecutor::registerNodes() {
-    // Register MoveToPoint node
+    // Register MoveToPoint node (sync)
     factory_.registerNodeType<MoveToPoint>("MoveToPoint");
-    
+
+    // Register AsyncMoveToPoint node (async)
+    factory_.registerNodeType<AsyncMoveToPoint>("AsyncMoveToPoint");
+
     // Register FollowPath node
     factory_.registerNodeType<FollowPath>("FollowPath");
-    
+
     // Register CheckEntityExists node
     factory_.registerNodeType<CheckEntityExists>("CheckEntityExists");
-    
+
     std::cout << "[BehaviorTreeExecutor] Registered custom nodes:" << std::endl;
     std::cout << "  - MoveToPoint" << std::endl;
+    std::cout << "  - AsyncMoveToPoint" << std::endl;
     std::cout << "  - FollowPath" << std::endl;
     std::cout << "  - CheckEntityExists" << std::endl;
 }
@@ -268,6 +273,140 @@ std::string BehaviorTreeExecutor::generateTreeId() {
     std::stringstream ss;
     ss << "bt_" << ++treeIdCounter_;
     return ss.str();
+}
+
+// ==================== Async Execution with Scheduler ====================
+
+std::string BehaviorTreeExecutor::executeAsync(const std::string& treeName,
+                                                BT::Blackboard::Ptr blackboard,
+                                                int tickIntervalMs,
+                                                BehaviorTreeScheduler::CompleteCallback onComplete) {
+    // 调用带间隔的版本，使用传入的tickIntervalMs
+    return executeAsyncWithInterval(treeName, blackboard, tickIntervalMs, onComplete);
+}
+
+std::string BehaviorTreeExecutor::executeAsyncWithInterval(const std::string& treeName,
+                                                            BT::Blackboard::Ptr blackboard,
+                                                            int tickIntervalMs,
+                                                            BehaviorTreeScheduler::CompleteCallback onComplete) {
+    if (!initialized_) {
+        lastError_ = "Executor not initialized";
+        return "";
+    }
+
+    try {
+        // If no blackboard provided, create a default one
+        if (!blackboard) {
+            blackboard = BT::Blackboard::create();
+        }
+
+        // Create behavior tree
+        auto tree = factory_.createTree(treeName, blackboard);
+
+        // Get entity ID from blackboard if available
+        std::string entityId;
+        try {
+            entityId = blackboard->get<std::string>("entity_id");
+        } catch (...) {
+            // entity_id not set, use empty string
+        }
+
+        // Schedule the tree with the scheduler (使用实例级频率)
+        std::string treeId = scheduler_.scheduleTreeWithInterval(treeName, std::move(tree), 
+                                                                  tickIntervalMs, entityId, onComplete);
+
+        if (!treeId.empty()) {
+            // Store in active trees for tracking
+            auto info = std::make_shared<TreeExecutionInfo>();
+            info->treeId = treeId;
+            info->treeName = treeName;
+            info->lastStatus = BT::NodeStatus::RUNNING;
+            info->isRunning = true;
+            info->isAsync = true;
+
+            {
+                std::lock_guard<std::mutex> lock(treesMutex_);
+                activeTrees_[treeId] = info;
+            }
+
+            int effectiveInterval = (tickIntervalMs > 0) ? tickIntervalMs : scheduler_.getTickInterval();
+            std::cout << "[BehaviorTreeExecutor] Started async behavior tree: " << treeName
+                      << " (ID: " << treeId << ", interval: " << effectiveInterval << "ms)" << std::endl;
+        }
+
+        return treeId;
+    } catch (const std::exception& e) {
+        lastError_ = std::string("Failed to execute async behavior tree: ") + e.what();
+        std::cerr << "[BehaviorTreeExecutor] Error: " << lastError_ << std::endl;
+        return "";
+    }
+}
+
+bool BehaviorTreeExecutor::setAsyncTreeTickInterval(const std::string& treeId, int tickIntervalMs) {
+    return scheduler_.setTreeTickInterval(treeId, tickIntervalMs);
+}
+
+int BehaviorTreeExecutor::getAsyncTreeTickInterval(const std::string& treeId) const {
+    return scheduler_.getTreeTickInterval(treeId);
+}
+
+bool BehaviorTreeExecutor::stopAsync(const std::string& treeId) {
+    // Remove from scheduler
+    bool result = scheduler_.unscheduleTree(treeId);
+
+    if (result) {
+        // Remove from active trees
+        std::lock_guard<std::mutex> lock(treesMutex_);
+        activeTrees_.erase(treeId);
+    }
+
+    return result;
+}
+
+bool BehaviorTreeExecutor::haltAsync(const std::string& treeId) {
+    return scheduler_.haltTree(treeId);
+}
+
+bool BehaviorTreeExecutor::resumeAsync(const std::string& treeId) {
+    return scheduler_.resumeTree(treeId);
+}
+
+BT::NodeStatus BehaviorTreeExecutor::getAsyncStatus(const std::string& treeId) const {
+    return scheduler_.getTreeStatus(treeId);
+}
+
+bool BehaviorTreeExecutor::hasAsyncTree(const std::string& treeId) const {
+    return scheduler_.hasTree(treeId);
+}
+
+std::vector<std::string> BehaviorTreeExecutor::listAsyncTrees() const {
+    return scheduler_.getScheduledTreeIds();
+}
+
+void BehaviorTreeExecutor::updateScheduler() {
+    scheduler_.update();
+}
+
+void BehaviorTreeExecutor::setSchedulerManualMode(bool manual) {
+    scheduler_.setManualMode(manual);
+}
+
+bool BehaviorTreeExecutor::startScheduler(int tickIntervalMs) {
+    return scheduler_.start(tickIntervalMs);
+}
+
+void BehaviorTreeExecutor::stopScheduler() {
+    scheduler_.stop();
+
+    // Clear all async trees from active trees
+    std::lock_guard<std::mutex> lock(treesMutex_);
+    for (auto it = activeTrees_.begin(); it != activeTrees_.end();) {
+        if (it->second->isAsync) {
+            it = activeTrees_.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 } // namespace behaviortree

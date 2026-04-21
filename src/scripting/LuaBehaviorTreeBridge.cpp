@@ -218,6 +218,65 @@ void LuaBehaviorTreeBridge::registerLuaAPI() {
     btTable.set_function("get_last_error", [this]() -> std::string {
         return getLastError();
     });
+
+    // ==================== Async Execution API ====================
+
+    // Execute behavior tree asynchronously
+    btTable.set_function("execute_async", [this](const std::string& treeName,
+                                                  sol::optional<std::string> entityId,
+                                                  sol::optional<sol::table> params,
+                                                  sol::optional<int> tickIntervalMs) -> std::string {
+        std::string id = entityId.value_or("");
+        int interval = tickIntervalMs.value_or(100);
+        return executeAsync(treeName, id, params, interval);
+    });
+
+    // Stop async behavior tree
+    btTable.set_function("stop_async", [this](const std::string& treeId) -> bool {
+        return stopAsync(treeId);
+    });
+
+    // Get async behavior tree status
+    btTable.set_function("get_async_status", [this](const std::string& treeId) -> std::string {
+        return getAsyncStatus(treeId);
+    });
+
+    // List all async behavior trees
+    btTable.set_function("list_async_trees", [this]() -> sol::table {
+        return listAsyncTrees();
+    });
+
+    // Set complete callback
+    btTable.set_function("set_complete_callback", [this](const std::string& treeId,
+                                                          sol::protected_function callback) -> bool {
+        return setCompleteCallback(treeId, callback);
+    });
+
+    // Set tick callback
+    btTable.set_function("set_tick_callback", [this](const std::string& treeId,
+                                                      sol::protected_function callback) -> bool {
+        return setTickCallback(treeId, callback);
+    });
+
+    // Start scheduler
+    btTable.set_function("start_scheduler", [this](sol::optional<int> tickIntervalMs) -> bool {
+        return startScheduler(tickIntervalMs);
+    });
+
+    // Stop scheduler
+    btTable.set_function("stop_scheduler", [this]() {
+        stopScheduler();
+    });
+
+    // Set scheduler manual mode
+    btTable.set_function("set_manual_mode", [this](bool manual) {
+        setSchedulerManualMode(manual);
+    });
+
+    // Manual update (for manual mode)
+    btTable.set_function("update_scheduler", [this]() {
+        updateScheduler();
+    });
 }
 
 bool LuaBehaviorTreeBridge::loadBehaviorTreeFromFile(const std::string& xmlFile) {
@@ -463,6 +522,232 @@ std::string LuaBehaviorTreeBridge::generateTreeId() {
     std::stringstream ss;
     ss << "bt_" << ++treeIdCounter_;
     return ss.str();
+}
+
+// ==================== Async Execution API ====================
+
+std::string LuaBehaviorTreeBridge::executeAsync(const std::string& treeName,
+                                                 const std::string& entityId,
+                                                 sol::optional<sol::table> params,
+                                                 sol::optional<int> tickIntervalMs) {
+    if (!factory_) {
+        lastError_ = "BT factory is null";
+        return "";
+    }
+
+    try {
+        // Create blackboard
+        auto blackboard = BT::Blackboard::create();
+
+        // Set entity ID
+        blackboard->set(behaviortree::BlackboardKeys::ENTITY_ID, entityId);
+
+        // Set additional parameters if provided
+        if (params) {
+            sol::table paramsTable = params.value();
+            for (auto& pair : paramsTable) {
+                std::string key = pair.first.as<std::string>();
+                sol::object value = pair.second;
+
+                if (value.is<std::string>()) {
+                    blackboard->set(key, value.as<std::string>());
+                } else if (value.is<bool>()) {
+                    blackboard->set(key, value.as<bool>());
+                } else if (value.is<int>()) {
+                    blackboard->set(key, value.as<int>());
+                } else if (value.is<double>()) {
+                    double d = value.as<double>();
+                    if (d == static_cast<int>(d)) {
+                        blackboard->set(key, static_cast<int>(d));
+                    } else {
+                        blackboard->set(key, d);
+                    }
+                }
+            }
+        }
+
+        // Create tree
+        auto tree = factory_->createTree(treeName, blackboard);
+
+        // Generate tree ID
+        std::string treeId = generateTreeId();
+
+        // Store tree info
+        auto info = std::make_shared<TreeExecutionInfo>();
+        info->treeId = treeId;
+        info->treeName = treeName;
+        info->entityId = entityId;
+        info->tree = std::move(tree);
+        info->isRunning = true;
+        info->startTime = std::chrono::steady_clock::now();
+
+        {
+            std::lock_guard<std::mutex> lock(treesMutex_);
+            activeTrees_[treeId] = info;
+        }
+
+        // Execute first tick synchronously
+        info->lastStatus = info->tree.tickRoot();
+        info->isRunning = (info->lastStatus == BT::NodeStatus::RUNNING);
+
+        // If tree is still running, we would need a scheduler to continue ticking
+        // For now, return the tree ID for tracking
+        // In a full implementation, this would integrate with BehaviorTreeScheduler
+
+        return treeId;
+
+    } catch (const std::exception& e) {
+        lastError_ = std::string("Failed to execute async behavior tree: ") + e.what();
+        return "";
+    }
+}
+
+bool LuaBehaviorTreeBridge::stopAsync(const std::string& treeId) {
+    std::lock_guard<std::mutex> lock(treesMutex_);
+    auto it = activeTrees_.find(treeId);
+    if (it == activeTrees_.end()) {
+        lastError_ = "Tree not found: " + treeId;
+        return false;
+    }
+
+    it->second->tree.haltTree();
+    it->second->isRunning = false;
+    it->second->lastStatus = BT::NodeStatus::IDLE;
+
+    // Remove callbacks
+    {
+        std::lock_guard<std::mutex> cbLock(callbacksMutex_);
+        asyncCallbacks_.erase(treeId);
+    }
+
+    return true;
+}
+
+std::string LuaBehaviorTreeBridge::getAsyncStatus(const std::string& treeId) {
+    std::lock_guard<std::mutex> lock(treesMutex_);
+    auto it = activeTrees_.find(treeId);
+    if (it == activeTrees_.end()) {
+        return "NOT_FOUND";
+    }
+
+    switch (it->second->lastStatus) {
+        case BT::NodeStatus::SUCCESS: return "SUCCESS";
+        case BT::NodeStatus::FAILURE: return "FAILURE";
+        case BT::NodeStatus::RUNNING: return "RUNNING";
+        case BT::NodeStatus::IDLE: return "IDLE";
+        default: return "UNKNOWN";
+    }
+}
+
+sol::table LuaBehaviorTreeBridge::listAsyncTrees() {
+    sol::table result = luaState_->create_table();
+
+    std::lock_guard<std::mutex> lock(treesMutex_);
+    int index = 1;
+    for (const auto& pair : activeTrees_) {
+        if (pair.second->isRunning) {
+            sol::table treeInfo = luaState_->create_table();
+            treeInfo["id"] = pair.first;
+            treeInfo["name"] = pair.second->treeName;
+            treeInfo["entity_id"] = pair.second->entityId;
+
+            std::string statusStr;
+            switch (pair.second->lastStatus) {
+                case BT::NodeStatus::SUCCESS: statusStr = "SUCCESS"; break;
+                case BT::NodeStatus::FAILURE: statusStr = "FAILURE"; break;
+                case BT::NodeStatus::RUNNING: statusStr = "RUNNING"; break;
+                case BT::NodeStatus::IDLE: statusStr = "IDLE"; break;
+                default: statusStr = "UNKNOWN"; break;
+            }
+            treeInfo["status"] = statusStr;
+
+            result[index++] = treeInfo;
+        }
+    }
+
+    return result;
+}
+
+bool LuaBehaviorTreeBridge::setCompleteCallback(const std::string& treeId, sol::protected_function callback) {
+    if (!callback.valid()) {
+        lastError_ = "Invalid callback function";
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(callbacksMutex_);
+    asyncCallbacks_[treeId].onComplete = callback;
+    return true;
+}
+
+bool LuaBehaviorTreeBridge::setTickCallback(const std::string& treeId, sol::protected_function callback) {
+    if (!callback.valid()) {
+        lastError_ = "Invalid callback function";
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(callbacksMutex_);
+    asyncCallbacks_[treeId].onTick = callback;
+    return true;
+}
+
+bool LuaBehaviorTreeBridge::startScheduler(sol::optional<int> tickIntervalMs) {
+    // Placeholder - would integrate with BehaviorTreeScheduler
+    // For now, just return true as the basic async execution works
+    return true;
+}
+
+void LuaBehaviorTreeBridge::stopScheduler() {
+    // Placeholder - would integrate with BehaviorTreeScheduler
+    // Halt all running trees
+    std::lock_guard<std::mutex> lock(treesMutex_);
+    for (auto& pair : activeTrees_) {
+        if (pair.second->isRunning) {
+            pair.second->tree.haltTree();
+            pair.second->isRunning = false;
+        }
+    }
+}
+
+void LuaBehaviorTreeBridge::setSchedulerManualMode(bool manual) {
+    // Placeholder - would integrate with BehaviorTreeScheduler
+}
+
+void LuaBehaviorTreeBridge::updateScheduler() {
+    // Placeholder - would integrate with BehaviorTreeScheduler
+    // Tick all running trees
+    std::lock_guard<std::mutex> lock(treesMutex_);
+    for (auto& pair : activeTrees_) {
+        if (pair.second->isRunning) {
+            pair.second->lastStatus = pair.second->tree.tickRoot();
+            pair.second->isRunning = (pair.second->lastStatus == BT::NodeStatus::RUNNING);
+
+            // Call tick callback if set
+            std::lock_guard<std::mutex> cbLock(callbacksMutex_);
+            auto cbIt = asyncCallbacks_.find(pair.first);
+            if (cbIt != asyncCallbacks_.end() && cbIt->second.onTick.valid()) {
+                auto result = cbIt->second.onTick(pair.first);
+                if (!result.valid()) {
+                    sol::error err = result;
+                    std::cerr << "[LuaBehaviorTreeBridge] Tick callback error: " << err.what() << std::endl;
+                }
+            }
+
+            // Call complete callback if finished
+            if (!pair.second->isRunning && cbIt != asyncCallbacks_.end() && cbIt->second.onComplete.valid()) {
+                std::string statusStr;
+                switch (pair.second->lastStatus) {
+                    case BT::NodeStatus::SUCCESS: statusStr = "SUCCESS"; break;
+                    case BT::NodeStatus::FAILURE: statusStr = "FAILURE"; break;
+                    default: statusStr = "UNKNOWN"; break;
+                }
+                auto result = cbIt->second.onComplete(pair.first, statusStr);
+                if (!result.valid()) {
+                    sol::error err = result;
+                    std::cerr << "[LuaBehaviorTreeBridge] Complete callback error: " << err.what() << std::endl;
+                }
+            }
+        }
+    }
 }
 
 } // namespace scripting

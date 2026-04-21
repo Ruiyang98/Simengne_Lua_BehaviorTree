@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<root main_tree_to_execute="AsyncSquarePath">
+
+    <!-- 异步正方形路径移动：使用 AsyncMoveToPoint 实现平滑移动 -->
+    <BehaviorTree ID="AsyncSquarePath">
+        <Sequence name="async_square_sequence">
+            <!-- 检查实体 -->
+            <CheckEntityExists entity_id="{entity_id}" />
+
+            <!-- 正方形路径：使用 AsyncMoveToPoint 实现平滑移动 -->
+            <!-- 从当前位置移动到 (10,0) -->
+            <AsyncMoveToPoint x="10" y="0" z="0" speed="2.0" threshold="0.5" />
+
+            <!-- 从 (10,0) 移动到 (10,10) -->
+            <AsyncMoveToPoint x="10" y="10" z="0" speed="2.0" threshold="0.5" />
+
+            <!-- 从 (10,10) 移动到 (0,10) -->
+            <AsyncMoveToPoint x="0" y="10" z="0" speed="2.0" threshold="0.5" />
+
+            <!-- 从 (0,10) 移动回 (0,0) -->
+            <AsyncMoveToPoint x="0" y="0" z="0" speed="2.0" threshold="0.5" />
+        </Sequence>
+    </BehaviorTree>
+
+    <!-- 异步大正方形路径 -->
+    <BehaviorTree ID="AsyncLargeSquarePath">
+        <Sequence name="async_large_square_sequence">
+            <CheckEntityExists entity_id="{entity_id}" />
+
+            <!-- 大正方形路径：使用更快的速度 -->
+            <AsyncMoveToPoint x="50" y="0" z="0" speed="5.0" threshold="1.0" />
+            <AsyncMoveToPoint x="50" y="50" z="0" speed="5.0" threshold="1.0" />
+            <AsyncMoveToPoint x="0" y="50" z="0" speed="5.0" threshold="1.0" />
+            <AsyncMoveToPoint x="0" y="0" z="0" speed="5.0" threshold="1.0" />
+        </Sequence>
+    </BehaviorTree>
+
+    <!-- 异步巡逻路径（循环） -->
+    <BehaviorTree ID="AsyncPatrol">
+        <Repeat num_cycles="3" name="patrol_loop">
+            <Sequence name="patrol_sequence">
+                <CheckEntityExists entity_id="{entity_id}" />
+
+                <!-- 巡逻点 A -->
+                <AsyncMoveToPoint x="20" y="0" z="0" speed="3.0" threshold="0.5" />
+
+                <!-- 巡逻点 B -->
+                <AsyncMoveToPoint x="20" y="20" z="0" speed="3.0" threshold="0.5" />
+
+                <!-- 巡逻点 C -->
+                <AsyncMoveToPoint x="0" y="20" z="0" speed="3.0" threshold="0.5" />
+
+                <!-- 返回起点 -->
+                <AsyncMoveToPoint x="0" y="0" z="0" speed="3.0" threshold="0.5" />
+            </Sequence>
+        </Repeat>
+    </BehaviorTree>
+
+</root>

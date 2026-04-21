@@ -3,9 +3,11 @@
 set(BT_NODES_SOURCES
     EntityMovement.cpp
     MoveToPoint.cpp
+    AsyncMoveToPoint.cpp
     FollowPath.cpp
     CheckEntityExists.cpp
     BehaviorTreeExecutor.cpp
+    BehaviorTreeScheduler.cpp
 )
 
 add_library(bt_nodes STATIC ${BT_NODES_SOURCES})

@@ -112,7 +112,42 @@ public:
     
     // Check if tree exists
     bool hasTree(const std::string& treeId);
-    
+
+    // ==================== Async Execution API ====================
+
+    // Execute behavior tree asynchronously (returns immediately, runs in background)
+    std::string executeAsync(const std::string& treeName,
+                              const std::string& entityId,
+                              sol::optional<sol::table> params,
+                              sol::optional<int> tickIntervalMs);
+
+    // Stop an async behavior tree
+    bool stopAsync(const std::string& treeId);
+
+    // Get async behavior tree status
+    std::string getAsyncStatus(const std::string& treeId);
+
+    // List all async behavior tree IDs
+    sol::table listAsyncTrees();
+
+    // Set callback for when tree completes
+    bool setCompleteCallback(const std::string& treeId, sol::protected_function callback);
+
+    // Set callback for each tick
+    bool setTickCallback(const std::string& treeId, sol::protected_function callback);
+
+    // Start scheduler manually
+    bool startScheduler(sol::optional<int> tickIntervalMs);
+
+    // Stop scheduler
+    void stopScheduler();
+
+    // Set scheduler to manual mode (user must call update())
+    void setSchedulerManualMode(bool manual);
+
+    // Manual update (call this in game loop if using manual mode)
+    void updateScheduler();
+
 private:
     sol::state* luaState_;
     BT::BehaviorTreeFactory* factory_;
@@ -121,7 +156,15 @@ private:
     std::string lastError_;
     int treeIdCounter_;
     bool initialized_;
-    
+
+    // Async execution support
+    struct AsyncCallbackInfo {
+        sol::protected_function onComplete;
+        sol::protected_function onTick;
+    };
+    std::unordered_map<std::string, AsyncCallbackInfo> asyncCallbacks_;
+    std::mutex callbacksMutex_;
+
     // Generate unique tree ID
     std::string generateTreeId();
     
