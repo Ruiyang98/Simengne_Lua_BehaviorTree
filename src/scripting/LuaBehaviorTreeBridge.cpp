@@ -274,12 +274,17 @@ std::string LuaBehaviorTreeBridge::executeBehaviorTree(const std::string& treeNa
                 
                 if (value.is<std::string>()) {
                     blackboard->set(key, value.as<std::string>());
-                } else if (value.is<double>()) {
-                    blackboard->set(key, value.as<double>());
                 } else if (value.is<bool>()) {
                     blackboard->set(key, value.as<bool>());
                 } else if (value.is<int>()) {
                     blackboard->set(key, value.as<int>());
+                } else if (value.is<double>()) {
+                    double d = value.as<double>();
+                    if (d == static_cast<int>(d)) {
+                        blackboard->set(key, static_cast<int>(d));
+                    } else {
+                        blackboard->set(key, d);
+                    }
                 }
             }
         }
