@@ -116,37 +116,25 @@ public:
     // ==================== Async Execution API ====================
 
     // Execute behavior tree asynchronously (returns immediately, runs in background)
-    std::string executeAsync(const std::string& treeName,
-                              const std::string& entityId,
-                              sol::optional<sol::table> params,
-                              sol::optional<int> tickIntervalMs);
+    // entityId is now required (not optional)
+    bool executeAsync(const std::string& treeName,
+                      const std::string& entityId,
+                      sol::optional<sol::table> params);
 
-    // Stop an async behavior tree
-    bool stopAsync(const std::string& treeId);
+    // Stop an async behavior tree by entityId
+    bool stopAsync(const std::string& entityId);
 
-    // Get async behavior tree status
-    std::string getAsyncStatus(const std::string& treeId);
+    // Get async behavior tree status by entityId
+    std::string getAsyncStatus(const std::string& entityId);
 
-    // List all async behavior tree IDs
-    sol::table listAsyncTrees();
+    // Get all registered async entity IDs
+    sol::table getAsyncEntities();
 
     // Set callback for when tree completes
-    bool setCompleteCallback(const std::string& treeId, sol::protected_function callback);
+    bool setCompleteCallback(const std::string& entityId, sol::protected_function callback);
 
     // Set callback for each tick
-    bool setTickCallback(const std::string& treeId, sol::protected_function callback);
-
-    // Start scheduler manually
-    bool startScheduler(sol::optional<int> tickIntervalMs);
-
-    // Stop scheduler
-    void stopScheduler();
-
-    // Set scheduler to manual mode (user must call update())
-    void setSchedulerManualMode(bool manual);
-
-    // Manual update (call this in game loop if using manual mode)
-    void updateScheduler();
+    bool setTickCallback(const std::string& entityId, sol::protected_function callback);
 
 private:
     sol::state* luaState_;

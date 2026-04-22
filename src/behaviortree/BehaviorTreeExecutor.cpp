@@ -4,6 +4,7 @@
 #include "behaviortree/AsyncMoveToPoint.h"
 #include "behaviortree/FollowPath.h"
 #include "behaviortree/CheckEntityExists.h"
+#include "behaviortree/BehaviorTreeScheduler.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -275,21 +276,28 @@ std::string BehaviorTreeExecutor::generateTreeId() {
     return ss.str();
 }
 
-// ==================== Async Execution with Scheduler ====================
+// ==================== Async Execution with Global Scheduler ====================
 
-std::string BehaviorTreeExecutor::executeAsync(const std::string& treeName,
-                                                BT::Blackboard::Ptr blackboard,
-                                                int tickIntervalMs) {
-    // 调用带间隔的版本，使用传入的tickIntervalMs
-    return executeAsyncWithInterval(treeName, blackboard, tickIntervalMs);
+bool BehaviorTreeExecutor::executeAsync(const std::string& entityId,
+                                        const std::string& treeName,
+                                        BT::Blackboard::Ptr blackboard,
+                                        int tickIntervalMs) {
+    // Delegate to executeAsyncWithInterval, tickIntervalMs is ignored (scheduler uses fixed 500ms)
+    return executeAsyncWithInterval(entityId, treeName, blackboard, tickIntervalMs);
 }
 
-std::string BehaviorTreeExecutor::executeAsyncWithInterval(const std::string& treeName,
-                                                            BT::Blackboard::Ptr blackboard,
-                                                            int tickIntervalMs) {
+bool BehaviorTreeExecutor::executeAsyncWithInterval(const std::string& entityId,
+                                                    const std::string& treeName,
+                                                    BT::Blackboard::Ptr blackboard,
+                                                    int tickIntervalMs) {
     if (!initialized_) {
         lastError_ = "Executor not initialized";
-        return "";
+        return false;
+    }
+
+    if (entityId.empty()) {
+        lastError_ = "Entity ID cannot be empty";
+        return false;
     }
 
     try {
@@ -301,22 +309,17 @@ std::string BehaviorTreeExecutor::executeAsyncWithInterval(const std::string& tr
         // Create behavior tree
         auto tree = factory_.createTree(treeName, blackboard);
 
-        // Get entity ID from blackboard if available
-        std::string entityId;
-        try {
-            entityId = blackboard->get<std::string>("entity_id");
-        } catch (...) {
-            // entity_id not set, use empty string
-        }
+        // Get global scheduler instance
+        BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
 
-        // Schedule the tree with the scheduler (使用实例级频率)
-        std::string treeId = scheduler_.scheduleTreeWithInterval(treeName, std::move(tree), 
-                                                                  tickIntervalMs, entityId);
+        // Register entity with tree in the global scheduler
+        // tickIntervalMs is ignored, scheduler uses fixed 500ms interval
+        bool result = scheduler.registerEntityWithTree(entityId, treeName, std::move(tree), blackboard);
 
-        if (!treeId.empty()) {
+        if (result) {
             // Store in active trees for tracking
             auto info = std::make_shared<TreeExecutionInfo>();
-            info->treeId = treeId;
+            info->treeId = entityId;
             info->treeName = treeName;
             info->lastStatus = BT::NodeStatus::RUNNING;
             info->isRunning = true;
@@ -324,87 +327,75 @@ std::string BehaviorTreeExecutor::executeAsyncWithInterval(const std::string& tr
 
             {
                 std::lock_guard<std::mutex> lock(treesMutex_);
-                activeTrees_[treeId] = info;
+                activeTrees_[entityId] = info;
             }
 
-            int effectiveInterval = (tickIntervalMs > 0) ? tickIntervalMs : scheduler_.getTickInterval();
-            std::cout << "[BehaviorTreeExecutor] Started async behavior tree: " << treeName
-                      << " (ID: " << treeId << ", interval: " << effectiveInterval << "ms)" << std::endl;
+            std::cout << "[BehaviorTreeExecutor] Started async behavior tree for entity: " << entityId
+                      << " (tree: " << treeName << ", interval: 500ms [fixed])" << std::endl;
         }
 
-        return treeId;
+        return result;
     } catch (const std::exception& e) {
         lastError_ = std::string("Failed to execute async behavior tree: ") + e.what();
         std::cerr << "[BehaviorTreeExecutor] Error: " << lastError_ << std::endl;
-        return "";
+        return false;
     }
 }
 
-bool BehaviorTreeExecutor::setAsyncTreeTickInterval(const std::string& treeId, int tickIntervalMs) {
-    return scheduler_.setTreeTickInterval(treeId, tickIntervalMs);
-}
+bool BehaviorTreeExecutor::stopAsync(const std::string& entityId) {
+    // Get global scheduler instance
+    BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
 
-int BehaviorTreeExecutor::getAsyncTreeTickInterval(const std::string& treeId) const {
-    return scheduler_.getTreeTickInterval(treeId);
-}
-
-bool BehaviorTreeExecutor::stopAsync(const std::string& treeId) {
-    // Remove from scheduler
-    bool result = scheduler_.unscheduleTree(treeId);
+    // Unregister entity from scheduler
+    bool result = scheduler.unregisterEntity(entityId);
 
     if (result) {
         // Remove from active trees
         std::lock_guard<std::mutex> lock(treesMutex_);
-        activeTrees_.erase(treeId);
+        activeTrees_.erase(entityId);
     }
 
     return result;
 }
 
-bool BehaviorTreeExecutor::haltAsync(const std::string& treeId) {
-    return scheduler_.haltTree(treeId);
+bool BehaviorTreeExecutor::haltAsync(const std::string& entityId) {
+    // Get global scheduler instance
+    BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
+
+    // Pause entity in scheduler
+    return scheduler.pauseEntity(entityId);
 }
 
-bool BehaviorTreeExecutor::resumeAsync(const std::string& treeId) {
-    return scheduler_.resumeTree(treeId);
+bool BehaviorTreeExecutor::resumeAsync(const std::string& entityId) {
+    // Get global scheduler instance
+    BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
+
+    // Resume entity in scheduler
+    return scheduler.resumeEntity(entityId);
 }
 
-BT::NodeStatus BehaviorTreeExecutor::getAsyncStatus(const std::string& treeId) const {
-    return scheduler_.getTreeStatus(treeId);
+BT::NodeStatus BehaviorTreeExecutor::getAsyncStatus(const std::string& entityId) const {
+    // Get global scheduler instance
+    BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
+
+    // Get entity status from scheduler
+    return scheduler.getEntityStatus(entityId);
 }
 
-bool BehaviorTreeExecutor::hasAsyncTree(const std::string& treeId) const {
-    return scheduler_.hasTree(treeId);
+bool BehaviorTreeExecutor::hasAsyncEntity(const std::string& entityId) const {
+    // Get global scheduler instance
+    BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
+
+    // Check if entity exists in scheduler
+    return scheduler.hasEntity(entityId);
 }
 
-std::vector<std::string> BehaviorTreeExecutor::listAsyncTrees() const {
-    return scheduler_.getScheduledTreeIds();
-}
+std::vector<std::string> BehaviorTreeExecutor::getAsyncEntityIds() const {
+    // Get global scheduler instance
+    BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
 
-void BehaviorTreeExecutor::updateScheduler() {
-    scheduler_.update();
-}
-
-void BehaviorTreeExecutor::setSchedulerManualMode(bool manual) {
-    scheduler_.setManualMode(manual);
-}
-
-bool BehaviorTreeExecutor::startScheduler(int tickIntervalMs) {
-    return scheduler_.start(tickIntervalMs);
-}
-
-void BehaviorTreeExecutor::stopScheduler() {
-    scheduler_.stop();
-
-    // Clear all async trees from active trees
-    std::lock_guard<std::mutex> lock(treesMutex_);
-    for (auto it = activeTrees_.begin(); it != activeTrees_.end();) {
-        if (it->second->isAsync) {
-            it = activeTrees_.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    // Get all registered entity IDs from scheduler
+    return scheduler.getRegisteredEntityIds();
 }
 
 } // namespace behaviortree

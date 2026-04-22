@@ -12,6 +12,7 @@
 #include "simulation/MockSimController.h"
 #include "scripting/LuaSimBinding.h"
 #include "behaviortree/BehaviorTreeExecutor.h"
+#include "behaviortree/BehaviorTreeScheduler.h"
 #include "behaviortree/BlackboardKeys.h"
 
 using namespace simulation;
@@ -57,11 +58,11 @@ void printUsage() {
     std::cout << "  entity add <type> <x> <y>   - Add a new entity" << std::endl;
     std::cout << "  bt <xml_file> [tree_name] [-e <id>]  - Execute behavior tree from XML" << std::endl;
     std::cout << "  bt list                     - List available behavior trees" << std::endl;
-    std::cout << "  bt-async <xml_file> [tree_name] [-e <id>] [-i <ms>]" << std::endl;
+    std::cout << "  bt-async <xml_file> <entity_id> [tree_name]" << std::endl;
     std::cout << "                              - Execute behavior tree asynchronously" << std::endl;
-    std::cout << "  bt-stop <tree_id>           - Stop an async behavior tree" << std::endl;
+    std::cout << "  bt-stop <entity_id>         - Stop an async behavior tree" << std::endl;
     std::cout << "  bt-list                     - List running async behavior trees" << std::endl;
-    std::cout << "  bt-status <tree_id>         - Get async behavior tree status" << std::endl;
+    std::cout << "  bt-status <entity_id>       - Get async behavior tree status" << std::endl;
     std::cout << "  lua <script_path>           - Execute a Lua script file" << std::endl;
     std::cout << "  lua-bt                      - List Lua+BT integration examples" << std::endl;
     std::cout << std::endl;
@@ -69,8 +70,9 @@ void printUsage() {
     std::cout << "  > bt bt_xml/square_path_composite.xml SquarePathComposite" << std::endl;
     std::cout << "  > bt bt_xml/square_path.xml SquarePath" << std::endl;
     std::cout << "  > bt bt_xml/square_path.xml SquarePath -e npc_001" << std::endl;
-    std::cout << "  > bt-async bt_xml/async_square_path.xml AsyncSquarePath -e npc_001 -i 100" << std::endl;
-    std::cout << "  > bt-stop scheduled_bt_1" << std::endl;
+    std::cout << "  > bt-async bt_xml/async_square_path.xml npc_001 AsyncSquarePath" << std::endl;
+    std::cout << "  > bt-stop npc_001" << std::endl;
+    std::cout << "  > bt-status npc_001" << std::endl;
     std::cout << "  > entity add npc 10 20" << std::endl;
     std::cout << "  > lua scripts/example_control.lua" << std::endl;
     std::cout << "  > lua scripts/bt_control_example.lua" << std::endl;
@@ -153,7 +155,7 @@ void listEntities() {
 // Add a new entity
 void addEntity(const std::vector<std::string>& args) {
     if (args.size() < 5) {
-        std::cerr << "Usage: entity add <type> <x> <y> [z]" << std::endl;
+        std::cerr << "Usage: entity add <type> <x> <y>" << std::endl;
         return;
     }
     
@@ -179,7 +181,7 @@ void listBehaviorTrees() {
     std::cout << "  > bt bt_xml/square_path_composite.xml SquarePathComposite" << std::endl;
     std::cout << "  > bt bt_xml/square_path.xml SquarePath" << std::endl;
     std::cout << "  > bt bt_xml/square_path.xml SquarePath -e <entity_id>" << std::endl;
-    std::cout << "  > bt-async bt_xml/async_square_path.xml AsyncSquarePath -e <entity_id> -i 100" << std::endl;
+    std::cout << "  > bt-async bt_xml/async_square_path.xml <entity_id> [tree_name]" << std::endl;
 }
 
 // List Lua+BT integration examples
@@ -242,9 +244,9 @@ void handleBtCommand(const std::vector<std::string>& args) {
 }
 
 // Execute behavior tree asynchronously from command
-// Usage: bt-async <xml_file> [tree_name] [-e <entity_id>] [-i <interval_ms>]
-bool executeAsyncBehaviorTree(const std::string& xmlFile, const std::string& treeName,
-                               const std::string& entityId, int tickIntervalMs) {
+// Usage: bt-async <xml_file> <entity_id> [tree_name]
+bool executeAsyncBehaviorTree(const std::string& xmlFile, const std::string& entityId,
+                               const std::string& treeName) {
     if (!g_btExecutor) {
         std::cerr << "ERROR: Behavior tree executor not initialized" << std::endl;
         return false;
@@ -263,41 +265,26 @@ bool executeAsyncBehaviorTree(const std::string& xmlFile, const std::string& tre
     // Create blackboard and set parameters
     auto blackboard = BT::Blackboard::create();
 
-    // Use specified entity ID or find/create one
-    if (!entityId.empty()) {
-        // Verify the entity exists
-        double x, y, z;
-        if (g_simController->getEntityPosition(entityId, x, y, z)) {
-            blackboard->set(BlackboardKeys::ENTITY_ID, entityId);
-            std::cout << "INFO: Using specified entity: " << entityId << std::endl;
-        } else {
-            std::cerr << "ERROR: Entity not found: " << entityId << std::endl;
-            return false;
-        }
+    // Verify the entity exists
+    double x, y, z;
+    if (g_simController->getEntityPosition(entityId, x, y, z)) {
+        blackboard->set(BlackboardKeys::ENTITY_ID, entityId);
+        std::cout << "INFO: Using specified entity: " << entityId << std::endl;
     } else {
-        // Try to get an existing entity
-        auto entities = g_simController->getAllEntities();
-        if (!entities.empty()) {
-            blackboard->set(BlackboardKeys::ENTITY_ID, entities[0].id);
-            std::cout << "INFO: Using existing entity: " << entities[0].id << std::endl;
-        } else {
-            // Create a test entity
-            std::string newId = g_simController->addEntity("npc", 0.0, 0.0, 0.0);
-            blackboard->set(BlackboardKeys::ENTITY_ID, newId);
-            std::cout << "INFO: Created test entity: " << newId << std::endl;
-        }
+        std::cerr << "ERROR: Entity not found: " << entityId << std::endl;
+        return false;
     }
 
     std::cout << std::endl;
     std::cout << "Starting async behavior tree: " << treeName << std::endl;
-    std::cout << "Tick interval: " << tickIntervalMs << "ms" << std::endl;
+    std::cout << "Tick interval: 500ms (fixed)" << std::endl;
     std::cout << "----------------------------------------" << std::endl;
 
     // Execute behavior tree asynchronously
-    std::string treeId = g_btExecutor->executeAsync(treeName, blackboard, tickIntervalMs);
+    bool success = g_btExecutor->executeAsync(entityId, treeName, blackboard);
 
-    if (!treeId.empty()) {
-        std::cout << "OK: Async behavior tree started with ID: " << treeId << std::endl;
+    if (success) {
+        std::cout << "OK: Async behavior tree started for entity: " << entityId << std::endl;
         return true;
     } else {
         std::cerr << "ERROR: Failed to start async behavior tree: " << g_btExecutor->getLastError() << std::endl;
@@ -306,44 +293,32 @@ bool executeAsyncBehaviorTree(const std::string& xmlFile, const std::string& tre
 }
 
 // Handle async behavior tree command
+// Usage: bt-async <xml_file> <entity_id> [tree_name]
 void handleBtAsyncCommand(const std::vector<std::string>& args) {
-    if (args.size() < 2) {
-        std::cerr << "Usage: bt-async <xml_file> [tree_name] [-e <entity_id>] [-i <interval_ms>]" << std::endl;
+    if (args.size() < 3) {
+        std::cerr << "Usage: bt-async <xml_file> <entity_id> [tree_name]" << std::endl;
         return;
     }
 
     std::string xmlFile = args[1];
-    std::string treeName = "MainTree";
-    std::string entityId = "";
-    int tickIntervalMs = 100; // Default 100ms
+    std::string entityId = args[2];
+    std::string treeName = (args.size() > 3) ? args[3] : "MainTree";
 
-    // Parse remaining arguments
-    for (size_t i = 2; i < args.size(); ++i) {
-        if ((args[i] == "-e" || args[i] == "--entity") && i + 1 < args.size()) {
-            entityId = args[i + 1];
-            ++i;
-        } else if ((args[i] == "-i" || args[i] == "--interval") && i + 1 < args.size()) {
-            tickIntervalMs = std::stoi(args[i + 1]);
-            ++i;
-        } else if (treeName == "MainTree") {
-            treeName = args[i];
-        }
-    }
-
-    executeAsyncBehaviorTree(xmlFile, treeName, entityId, tickIntervalMs);
+    executeAsyncBehaviorTree(xmlFile, entityId, treeName);
 }
 
 // Handle bt-stop command
+// Usage: bt-stop <entity_id>
 void handleBtStopCommand(const std::vector<std::string>& args) {
     if (args.size() < 2) {
-        std::cerr << "Usage: bt-stop <tree_id>" << std::endl;
+        std::cerr << "Usage: bt-stop <entity_id>" << std::endl;
         return;
     }
 
-    std::string treeId = args[1];
+    std::string entityId = args[1];
 
-    if (g_btExecutor->stopAsync(treeId)) {
-        std::cout << "OK: Stopped async behavior tree: " << treeId << std::endl;
+    if (g_btExecutor->stopAsync(entityId)) {
+        std::cout << "OK: Stopped async behavior tree for entity: " << entityId << std::endl;
     } else {
         std::cerr << "ERROR: Failed to stop behavior tree: " << g_btExecutor->getLastError() << std::endl;
     }
@@ -351,9 +326,9 @@ void handleBtStopCommand(const std::vector<std::string>& args) {
 
 // Handle bt-list command
 void handleBtListCommand(const std::vector<std::string>& args) {
-    auto treeIds = g_btExecutor->listAsyncTrees();
+    auto entityIds = g_btExecutor->getAsyncEntityIds();
 
-    if (treeIds.empty()) {
+    if (entityIds.empty()) {
         std::cout << "No async behavior trees are currently running." << std::endl;
         return;
     }
@@ -361,8 +336,8 @@ void handleBtListCommand(const std::vector<std::string>& args) {
     std::cout << "Running async behavior trees:" << std::endl;
     std::cout << "----------------------------" << std::endl;
 
-    for (const auto& treeId : treeIds) {
-        auto status = g_btExecutor->getAsyncStatus(treeId);
+    for (const auto& entityId : entityIds) {
+        auto status = g_btExecutor->getAsyncStatus(entityId);
         std::string statusStr;
         switch (status) {
             case BT::NodeStatus::SUCCESS: statusStr = "SUCCESS"; break;
@@ -371,25 +346,26 @@ void handleBtListCommand(const std::vector<std::string>& args) {
             case BT::NodeStatus::IDLE: statusStr = "IDLE"; break;
             default: statusStr = "UNKNOWN"; break;
         }
-        std::cout << "  " << treeId << " - Status: " << statusStr << std::endl;
+        std::cout << "  Entity: " << entityId << " - Status: " << statusStr << std::endl;
     }
 }
 
 // Handle bt-status command
+// Usage: bt-status <entity_id>
 void handleBtStatusCommand(const std::vector<std::string>& args) {
     if (args.size() < 2) {
-        std::cerr << "Usage: bt-status <tree_id>" << std::endl;
+        std::cerr << "Usage: bt-status <entity_id>" << std::endl;
         return;
     }
 
-    std::string treeId = args[1];
+    std::string entityId = args[1];
 
-    if (!g_btExecutor->hasAsyncTree(treeId)) {
-        std::cerr << "ERROR: Tree not found: " << treeId << std::endl;
+    if (!g_btExecutor->hasAsyncEntity(entityId)) {
+        std::cerr << "ERROR: Entity not found in async execution: " << entityId << std::endl;
         return;
     }
 
-    auto status = g_btExecutor->getAsyncStatus(treeId);
+    auto status = g_btExecutor->getAsyncStatus(entityId);
     std::string statusStr;
     switch (status) {
         case BT::NodeStatus::SUCCESS: statusStr = "SUCCESS"; break;
@@ -399,12 +375,16 @@ void handleBtStatusCommand(const std::vector<std::string>& args) {
         default: statusStr = "UNKNOWN"; break;
     }
 
-    std::cout << "Tree " << treeId << " status: " << statusStr << std::endl;
+    std::cout << "Entity " << entityId << " async BT status: " << statusStr << std::endl;
 }
 
 void runInteractiveMode(LuaSimBinding* luaBinding) {
     std::cout << "Entering interactive mode. Type 'help' for usage, 'quit' to exit." << std::endl;
     std::cout << std::endl;
+
+    // Timer for tickAll
+    auto lastTickTime = std::chrono::steady_clock::now();
+    const auto tickInterval = std::chrono::milliseconds(500);
 
     std::string input;
     while (true) {
@@ -416,6 +396,12 @@ void runInteractiveMode(LuaSimBinding* luaBinding) {
 
         // Skip empty input
         if (input.empty()) {
+            // Check if we need to tick even on empty input
+            auto now = std::chrono::steady_clock::now();
+            if (now - lastTickTime >= tickInterval) {
+                behaviortree::BehaviorTreeScheduler::getInstance().tickAll();
+                lastTickTime = now;
+            }
             continue;
         }
 
@@ -485,6 +471,13 @@ void runInteractiveMode(LuaSimBinding* luaBinding) {
         }
 
         std::cout << std::endl;
+
+        // Check if we need to tick after processing command
+        auto now = std::chrono::steady_clock::now();
+        if (now - lastTickTime >= tickInterval) {
+            behaviortree::BehaviorTreeScheduler::getInstance().tickAll();
+            lastTickTime = now;
+        }
     }
 }
 

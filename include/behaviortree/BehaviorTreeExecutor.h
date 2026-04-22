@@ -9,7 +9,6 @@
 #include <mutex>
 #include <functional>
 #include "simulation/SimControlInterface.h"
-#include "behaviortree/BehaviorTreeScheduler.h"
 
 namespace behaviortree {
 
@@ -69,58 +68,43 @@ public:
     // Get tree info (for Lua bridge integration)
     std::shared_ptr<TreeExecutionInfo> getTreeInfo(const std::string& treeId);
 
-    // ==================== Async Execution with Scheduler ====================
+    // ==================== Async Execution with Global Scheduler ====================
 
-    // Execute behavior tree asynchronously (using scheduler)
-    // Returns tree ID on success, empty string on failure
-    std::string executeAsync(const std::string& treeName = "MainTree",
-                              BT::Blackboard::Ptr blackboard = nullptr,
-                              int tickIntervalMs = 100);
+    // Execute behavior tree asynchronously (using global scheduler)
+    // entityId: entity ID for registration and management in scheduler
+    // treeName: behavior tree name
+    // blackboard: blackboard data
+    // tickIntervalMs: this parameter is reserved but ignored (scheduler uses fixed 500ms)
+    // Returns true on success, false on failure
+    bool executeAsync(const std::string& entityId,
+                      const std::string& treeName = "MainTree",
+                      BT::Blackboard::Ptr blackboard = nullptr,
+                      int tickIntervalMs = 100);
 
-    // Execute behavior tree asynchronously with custom tick interval (per-instance frequency)
-    // tickIntervalMs: 该实例的tick间隔（毫秒），0表示使用全局默认间隔
-    std::string executeAsyncWithInterval(const std::string& treeName = "MainTree",
-                                          BT::Blackboard::Ptr blackboard = nullptr,
-                                          int tickIntervalMs = 0);
+    // Execute behavior tree asynchronously with custom tick interval
+    // tickIntervalMs: this parameter is reserved but ignored (scheduler uses fixed 500ms)
+    bool executeAsyncWithInterval(const std::string& entityId,
+                                  const std::string& treeName = "MainTree",
+                                  BT::Blackboard::Ptr blackboard = nullptr,
+                                  int tickIntervalMs = 0);
 
-    // Set tick interval for a specific async tree instance
-    bool setAsyncTreeTickInterval(const std::string& treeId, int tickIntervalMs);
+    // Stop an async behavior tree for entity
+    bool stopAsync(const std::string& entityId);
 
-    // Get tick interval for a specific async tree instance
-    int getAsyncTreeTickInterval(const std::string& treeId) const;
+    // Halt an async behavior tree for entity (pause ticking)
+    bool haltAsync(const std::string& entityId);
 
-    // Stop an async behavior tree
-    bool stopAsync(const std::string& treeId);
+    // Resume a halted async behavior tree for entity
+    bool resumeAsync(const std::string& entityId);
 
-    // Halt an async behavior tree (pause ticking)
-    bool haltAsync(const std::string& treeId);
+    // Get async tree status for entity
+    BT::NodeStatus getAsyncStatus(const std::string& entityId) const;
 
-    // Resume a halted async behavior tree
-    bool resumeAsync(const std::string& treeId);
+    // Check if async entity exists in scheduler
+    bool hasAsyncEntity(const std::string& entityId) const;
 
-    // Get async tree status
-    BT::NodeStatus getAsyncStatus(const std::string& treeId) const;
-
-    // Check if async tree exists
-    bool hasAsyncTree(const std::string& treeId) const;
-
-    // List all async tree IDs
-    std::vector<std::string> listAsyncTrees() const;
-
-    // Get scheduler reference
-    BehaviorTreeScheduler& getScheduler() { return scheduler_; }
-
-    // Manual update - call this from game loop if using manual mode
-    void updateScheduler();
-
-    // Set scheduler manual mode
-    void setSchedulerManualMode(bool manual);
-
-    // Start scheduler (if not already started)
-    bool startScheduler(int tickIntervalMs = 100);
-
-    // Stop scheduler
-    void stopScheduler();
+    // Get all registered async entity IDs
+    std::vector<std::string> getAsyncEntityIds() const;
 
 private:
     simulation::SimControlInterface* simController_;
@@ -132,9 +116,6 @@ private:
     mutable std::mutex treesMutex_;
     std::unordered_map<std::string, std::shared_ptr<TreeExecutionInfo>> activeTrees_;
     int treeIdCounter_;
-
-    // Scheduler for async execution
-    BehaviorTreeScheduler scheduler_;
 
     // Register custom nodes
     void registerNodes();

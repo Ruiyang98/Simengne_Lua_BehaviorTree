@@ -8,7 +8,6 @@
 #include <unordered_map>
 #include <vector>
 #include <mutex>
-#include <thread>
 #include <atomic>
 #include <chrono>
 
@@ -17,7 +16,7 @@ namespace behaviortree {
 // Forward declaration
 class BehaviorTreeExecutor;
 
-// Tree scheduling info
+// Entity scheduling info
 struct ScheduledTreeInfo {
     std::string treeId;
     std::string treeName;
@@ -25,116 +24,116 @@ struct ScheduledTreeInfo {
     BT::Tree tree;
     BT::NodeStatus lastStatus;
     bool isRunning;
+    bool paused;
     std::chrono::steady_clock::time_point lastTickTime;
     int tickCount;
-    
-    // 实例级tick间隔（毫秒），0表示使用全局默认间隔
+
+    // Instance-level tick interval (milliseconds), 0 means use global default
     int tickIntervalMs;
-    
-    // 该实例下一次应该tick的时间点
+
+    // The next time this instance should tick
     std::chrono::steady_clock::time_point nextTickTime;
 
     ScheduledTreeInfo()
         : lastStatus(BT::NodeStatus::IDLE)
         , isRunning(false)
+        , paused(false)
         , tickCount(0)
         , tickIntervalMs(0) {}
 };
 
-// Behavior tree scheduler: manages periodic ticking of behavior trees
+// Behavior tree scheduler: singleton pattern, manages periodic ticking of behavior trees
 class BehaviorTreeScheduler {
 public:
-    BehaviorTreeScheduler();
-    ~BehaviorTreeScheduler();
+    // Get the global unique instance
+    static BehaviorTreeScheduler& getInstance();
 
-    // Start the scheduler thread with specified tick interval (in milliseconds)
-    bool start(int tickIntervalMs = 100);
+    // Deleted copy constructor and assignment operator
+    BehaviorTreeScheduler(const BehaviorTreeScheduler&) = delete;
+    BehaviorTreeScheduler& operator=(const BehaviorTreeScheduler&) = delete;
 
-    // Stop the scheduler thread
-    void stop();
+    // Tick all scheduled trees once (called externally)
+    void tickAll();
 
-    // Check if scheduler is running
-    bool isRunning() const { return isRunning_; }
+    // Register an entity with a behavior tree
+    // entityId: the entity identifier (primary key)
+    // treeName: the name of the tree
+    // tree: the behavior tree instance
+    // blackboard: optional blackboard (for future use)
+    // Returns true on success, false on failure
+    bool registerEntityWithTree(const std::string& entityId,
+                                 const std::string& treeName,
+                                 BT::Tree&& tree,
+                                 std::shared_ptr<BT::Blackboard> blackboard = nullptr);
 
-    // Schedule a tree for periodic ticking
-    // Returns tree ID on success, empty string on failure
-    std::string scheduleTree(const std::string& treeName,
-                              BT::Tree&& tree,
-                              const std::string& entityId = "");
+    // Register an entity without a behavior tree (reserve entity slot)
+    // Returns true on success, false on failure
+    bool registerEntity(const std::string& entityId);
 
-    // Schedule a tree with custom tick interval (per-instance frequency)
-    // tickIntervalMs: 该实例的tick间隔（毫秒），0表示使用全局默认间隔
-    std::string scheduleTreeWithInterval(const std::string& treeName,
-                                          BT::Tree&& tree,
-                                          int tickIntervalMs,
-                                          const std::string& entityId = "");
+    // Register an entity with a custom tick interval
+    // tickIntervalMs: tick interval for this instance (milliseconds), 0 means use global default
+    bool registerEntityWithTreeAndInterval(const std::string& entityId,
+                                            const std::string& treeName,
+                                            BT::Tree&& tree,
+                                            int tickIntervalMs,
+                                            std::shared_ptr<BT::Blackboard> blackboard = nullptr);
 
-    // Set tick interval for a specific tree instance
-    bool setTreeTickInterval(const std::string& treeId, int tickIntervalMs);
+    // Unregister an entity (stop ticking and remove)
+    // Returns true on success, false on failure
+    bool unregisterEntity(const std::string& entityId);
 
-    // Get tick interval for a specific tree instance (returns 0 if using global default)
-    int getTreeTickInterval(const std::string& treeId) const;
+    // Pause an entity's behavior tree scheduling
+    // Returns true on success, false on failure
+    bool pauseEntity(const std::string& entityId);
 
-    // Unschedule a tree (stop ticking and remove)
-    bool unscheduleTree(const std::string& treeId);
+    // Resume an entity's behavior tree scheduling
+    // Returns true on success, false on failure
+    bool resumeEntity(const std::string& entityId);
 
-    // Halt a tree (stop ticking but keep in list)
-    bool haltTree(const std::string& treeId);
+    // Set tick interval for a specific entity
+    bool setEntityTickInterval(const std::string& entityId, int tickIntervalMs);
 
-    // Resume a halted tree
-    bool resumeTree(const std::string& treeId);
+    // Get tick interval for a specific entity (returns global default if using it)
+    int getEntityTickInterval(const std::string& entityId) const;
 
-    // Manual update - call this if not using the internal thread (e.g., called from game loop)
-    void update();
+    // Get entity status
+    BT::NodeStatus getEntityStatus(const std::string& entityId) const;
 
-    // Get tree status
-    BT::NodeStatus getTreeStatus(const std::string& treeId) const;
+    // Check if entity is registered
+    bool hasEntity(const std::string& entityId) const;
 
-    // Check if tree is scheduled
-    bool hasTree(const std::string& treeId) const;
+    // Get entity info
+    std::shared_ptr<ScheduledTreeInfo> getEntityInfo(const std::string& entityId) const;
 
-    // Get tree info
-    std::shared_ptr<ScheduledTreeInfo> getTreeInfo(const std::string& treeId) const;
+    // Get all registered entity IDs
+    std::vector<std::string> getRegisteredEntityIds() const;
 
-    // Get all scheduled tree IDs
-    std::vector<std::string> getScheduledTreeIds() const;
-
-    // Get number of scheduled trees
-    size_t getScheduledTreeCount() const;
-
-    // Set tick interval (can be changed while running)
-    void setTickInterval(int tickIntervalMs);
-
-    // Get tick interval
-    int getTickInterval() const { return tickIntervalMs_; }
-
-    // Set manual mode (disable internal thread, user must call update())
-    void setManualMode(bool manual);
-
-    // Check if in manual mode
-    bool isManualMode() const { return manualMode_; }
+    // Get number of registered entities
+    size_t getRegisteredEntityCount() const;
 
     // Get last error message
     std::string getLastError() const { return lastError_; }
 
+    // Fixed tick interval constant (milliseconds)
+    static constexpr int TICK_INTERVAL_MS = 500;
+
 private:
+    // Private constructor for singleton
+    BehaviorTreeScheduler();
+
+    // Private destructor
+    ~BehaviorTreeScheduler();
+
     mutable std::mutex mutex_;
-    std::unordered_map<std::string, std::shared_ptr<ScheduledTreeInfo>> scheduledTrees_;
+    // Use entityId as primary key
+    std::unordered_map<std::string, std::shared_ptr<ScheduledTreeInfo>> entities_;
     std::atomic<int> treeIdCounter_{0};
-    std::atomic<bool> isRunning_{false};
-    std::atomic<bool> manualMode_{false};
-    std::atomic<int> tickIntervalMs_{100};
-    std::thread schedulerThread_;
-    std::atomic<bool> shouldStop_{false};
     std::string lastError_;
 
-    // Generate unique tree ID
+    // Generate unique tree ID (internal identifier)
     std::string generateTreeId();
 
-    // Scheduler loop (runs in separate thread)
-    void schedulerLoop();
-
-    // Tick a single tree
+    // Tick a single entity's tree
     void tickTree(const std::shared_ptr<ScheduledTreeInfo>& info);
 
     // Clean up completed trees (optional, can be called periodically)
