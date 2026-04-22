@@ -10,7 +10,6 @@
 #include <mutex>
 #include <thread>
 #include <atomic>
-#include <functional>
 #include <chrono>
 
 namespace behaviortree {
@@ -27,8 +26,6 @@ struct ScheduledTreeInfo {
     BT::NodeStatus lastStatus;
     bool isRunning;
     std::chrono::steady_clock::time_point lastTickTime;
-    std::function<void(const std::string&, BT::NodeStatus)> onCompleteCallback;
-    std::function<void(const std::string&)> onTickCallback;
     int tickCount;
     
     // 实例级tick间隔（毫秒），0表示使用全局默认间隔
@@ -47,9 +44,6 @@ struct ScheduledTreeInfo {
 // Behavior tree scheduler: manages periodic ticking of behavior trees
 class BehaviorTreeScheduler {
 public:
-    using CompleteCallback = std::function<void(const std::string&, BT::NodeStatus)>;
-    using TickCallback = std::function<void(const std::string&)>;
-
     BehaviorTreeScheduler();
     ~BehaviorTreeScheduler();
 
@@ -66,18 +60,14 @@ public:
     // Returns tree ID on success, empty string on failure
     std::string scheduleTree(const std::string& treeName,
                               BT::Tree&& tree,
-                              const std::string& entityId = "",
-                              CompleteCallback onComplete = nullptr,
-                              TickCallback onTick = nullptr);
+                              const std::string& entityId = "");
 
     // Schedule a tree with custom tick interval (per-instance frequency)
     // tickIntervalMs: 该实例的tick间隔（毫秒），0表示使用全局默认间隔
     std::string scheduleTreeWithInterval(const std::string& treeName,
                                           BT::Tree&& tree,
                                           int tickIntervalMs,
-                                          const std::string& entityId = "",
-                                          CompleteCallback onComplete = nullptr,
-                                          TickCallback onTick = nullptr);
+                                          const std::string& entityId = "");
 
     // Set tick interval for a specific tree instance
     bool setTreeTickInterval(const std::string& treeId, int tickIntervalMs);

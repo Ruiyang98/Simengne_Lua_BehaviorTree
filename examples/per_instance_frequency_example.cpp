@@ -74,12 +74,6 @@ int main() {
     // 5. 模拟游戏主循环
     auto startTime = std::chrono::steady_clock::now();
     int globalTickCount = 0;
-    
-    // 记录每个树的tick次数
-    std::unordered_map<std::string, int> treeTickCounts;
-    treeTickCounts[tree1] = 0;
-    treeTickCounts[tree2] = 0;
-    treeTickCounts[tree3] = 0;
 
     while (true) {
         auto now = std::chrono::steady_clock::now();
@@ -88,14 +82,6 @@ int main() {
         // 每10ms调用一次update（模拟游戏帧率100 FPS）
         executor.updateScheduler();
         globalTickCount++;
-
-        // 统计每个树的tick次数
-        for (auto& pair : treeTickCounts) {
-            auto status = executor.getAsyncStatus(pair.first);
-            if (status == BT::NodeStatus::RUNNING) {
-                // 这里简化处理，实际应该通过回调统计
-            }
-        }
 
         // 每1000ms打印一次状态
         if (globalTickCount % 100 == 0) {

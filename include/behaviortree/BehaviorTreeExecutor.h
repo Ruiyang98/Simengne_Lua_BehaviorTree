@@ -75,15 +75,13 @@ public:
     // Returns tree ID on success, empty string on failure
     std::string executeAsync(const std::string& treeName = "MainTree",
                               BT::Blackboard::Ptr blackboard = nullptr,
-                              int tickIntervalMs = 100,
-                              BehaviorTreeScheduler::CompleteCallback onComplete = nullptr);
+                              int tickIntervalMs = 100);
 
     // Execute behavior tree asynchronously with custom tick interval (per-instance frequency)
     // tickIntervalMs: 该实例的tick间隔（毫秒），0表示使用全局默认间隔
     std::string executeAsyncWithInterval(const std::string& treeName = "MainTree",
                                           BT::Blackboard::Ptr blackboard = nullptr,
-                                          int tickIntervalMs = 0,
-                                          BehaviorTreeScheduler::CompleteCallback onComplete = nullptr);
+                                          int tickIntervalMs = 0);
 
     // Set tick interval for a specific async tree instance
     bool setAsyncTreeTickInterval(const std::string& treeId, int tickIntervalMs);

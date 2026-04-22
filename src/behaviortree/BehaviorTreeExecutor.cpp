@@ -279,16 +279,14 @@ std::string BehaviorTreeExecutor::generateTreeId() {
 
 std::string BehaviorTreeExecutor::executeAsync(const std::string& treeName,
                                                 BT::Blackboard::Ptr blackboard,
-                                                int tickIntervalMs,
-                                                BehaviorTreeScheduler::CompleteCallback onComplete) {
+                                                int tickIntervalMs) {
     // 调用带间隔的版本，使用传入的tickIntervalMs
-    return executeAsyncWithInterval(treeName, blackboard, tickIntervalMs, onComplete);
+    return executeAsyncWithInterval(treeName, blackboard, tickIntervalMs);
 }
 
 std::string BehaviorTreeExecutor::executeAsyncWithInterval(const std::string& treeName,
                                                             BT::Blackboard::Ptr blackboard,
-                                                            int tickIntervalMs,
-                                                            BehaviorTreeScheduler::CompleteCallback onComplete) {
+                                                            int tickIntervalMs) {
     if (!initialized_) {
         lastError_ = "Executor not initialized";
         return "";
@@ -313,7 +311,7 @@ std::string BehaviorTreeExecutor::executeAsyncWithInterval(const std::string& tr
 
         // Schedule the tree with the scheduler (使用实例级频率)
         std::string treeId = scheduler_.scheduleTreeWithInterval(treeName, std::move(tree), 
-                                                                  tickIntervalMs, entityId, onComplete);
+                                                                  tickIntervalMs, entityId);
 
         if (!treeId.empty()) {
             // Store in active trees for tracking

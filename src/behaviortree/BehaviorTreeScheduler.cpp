@@ -73,18 +73,14 @@ void BehaviorTreeScheduler::stop() {
 
 std::string BehaviorTreeScheduler::scheduleTree(const std::string& treeName,
                                                  BT::Tree&& tree,
-                                                 const std::string& entityId,
-                                                 CompleteCallback onComplete,
-                                                 TickCallback onTick) {
-    return scheduleTreeWithInterval(treeName, std::move(tree), 0, entityId, onComplete, onTick);
+                                                 const std::string& entityId) {
+    return scheduleTreeWithInterval(treeName, std::move(tree), 0, entityId);
 }
 
 std::string BehaviorTreeScheduler::scheduleTreeWithInterval(const std::string& treeName,
                                                              BT::Tree&& tree,
                                                              int tickIntervalMs,
-                                                             const std::string& entityId,
-                                                             CompleteCallback onComplete,
-                                                             TickCallback onTick) {
+                                                             const std::string& entityId) {
     std::string treeId = generateTreeId();
 
     auto info = std::make_shared<ScheduledTreeInfo>();
@@ -96,8 +92,6 @@ std::string BehaviorTreeScheduler::scheduleTreeWithInterval(const std::string& t
     info->isRunning = true;
     info->lastTickTime = std::chrono::steady_clock::now();
     info->nextTickTime = info->lastTickTime;
-    info->onCompleteCallback = onComplete;
-    info->onTickCallback = onTick;
     info->tickCount = 0;
     info->tickIntervalMs = tickIntervalMs;
 
@@ -330,15 +324,6 @@ void BehaviorTreeScheduler::tickTree(const std::shared_ptr<ScheduledTreeInfo>& i
     int effectiveInterval = (info->tickIntervalMs > 0) ? info->tickIntervalMs : tickIntervalMs_.load();
     info->nextTickTime = now + std::chrono::milliseconds(effectiveInterval);
 
-    if (info->onTickCallback) {
-        try {
-            info->onTickCallback(info->treeId);
-        } catch (const std::exception& e) {
-            std::cerr << "[BehaviorTreeScheduler] Tick callback error for tree "
-                      << info->treeId << ": " << e.what() << std::endl;
-        }
-    }
-
     if (info->lastStatus != BT::NodeStatus::RUNNING) {
         info->isRunning = false;
 
@@ -356,15 +341,6 @@ void BehaviorTreeScheduler::tickTree(const std::shared_ptr<ScheduledTreeInfo>& i
                 break;
         }
         std::cout << " (ticks: " << info->tickCount << ")" << std::endl;
-
-        if (info->onCompleteCallback) {
-            try {
-                info->onCompleteCallback(info->treeId, info->lastStatus);
-            } catch (const std::exception& e) {
-                std::cerr << "[BehaviorTreeScheduler] Completion callback error for tree "
-                          << info->treeId << ": " << e.what() << std::endl;
-            }
-        }
     }
 }
 
