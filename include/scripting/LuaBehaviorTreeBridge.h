@@ -9,6 +9,7 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <functional>
 #include <mutex>
 
@@ -152,6 +153,20 @@ public:
     // Set callback for each tick
     bool setTickCallback(const std::string& entityId, sol::protected_function callback);
 
+    // ==================== Lazy Loading API ====================
+
+    // Load global nodes registry script
+    bool loadNodesRegistry(const std::string& registryPath = "scripts/bt_nodes_registry.lua");
+
+    // Scan directory to build tree name -> file path mapping (without loading)
+    bool scanBehaviorTreeDefinitions(const std::string& directory);
+
+    // Check if tree definition is available (loaded or loadable)
+    bool isTreeDefinitionAvailable(const std::string& treeName);
+
+    // Lazy load tree definition on demand
+    bool loadTreeDefinition(const std::string& treeName);
+
 private:
     sol::state* luaState_;
     BT::BehaviorTreeFactory* factory_;
@@ -180,9 +195,18 @@ private:
     
     // Register bridge functions to Lua
     void registerLuaAPI();
-    
+
     // Register Lua node types to factory
     void registerLuaNodeTypes();
+
+    // Tree name -> file path mapping for lazy loading
+    std::unordered_map<std::string, std::string> treeDefinitionPaths_;
+
+    // Set of loaded tree definitions
+    std::unordered_set<std::string> loadedTreeDefinitions_;
+
+    // Try to find and load tree definition
+    bool tryLoadTreeDefinition(const std::string& treeName);
 };
 
 } // namespace scripting

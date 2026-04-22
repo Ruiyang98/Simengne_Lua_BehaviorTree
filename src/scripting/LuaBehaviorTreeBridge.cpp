@@ -4,6 +4,15 @@
 #include <iostream>
 #include <sstream>
 #include <chrono>
+#include <fstream>
+#include <algorithm>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dirent.h>
+#include <sys/stat.h>
+#endif
 
 namespace scripting {
 
@@ -338,6 +347,28 @@ void LuaBehaviorTreeBridge::registerLuaAPI() {
                                                       sol::protected_function callback) -> bool {
         return setTickCallback(entityId, callback);
     });
+
+    // ==================== Lazy Loading API ====================
+
+    // Load global nodes registry script
+    btTable.set_function("load_registry", [this](sol::optional<std::string> registryPath) -> bool {
+        return loadNodesRegistry(registryPath.value_or("scripts/bt_nodes_registry.lua"));
+    });
+
+    // Scan behavior tree definitions
+    btTable.set_function("scan_trees", [this](const std::string& directory) -> bool {
+        return scanBehaviorTreeDefinitions(directory);
+    });
+
+    // Check if tree definition is available
+    btTable.set_function("is_tree_available", [this](const std::string& treeName) -> bool {
+        return isTreeDefinitionAvailable(treeName);
+    });
+
+    // Preload specific tree (optional)
+    btTable.set_function("preload_tree", [this](const std::string& treeName) -> bool {
+        return loadTreeDefinition(treeName);
+    });
 }
 
 bool LuaBehaviorTreeBridge::loadBehaviorTreeFromFile(const std::string& xmlFile) {
@@ -375,6 +406,12 @@ std::string LuaBehaviorTreeBridge::executeBehaviorTree(const std::string& treeNa
                                                         sol::optional<sol::table> params) {
     if (!factory_) {
         lastError_ = "BT factory is null";
+        return "";
+    }
+
+    // Lazy load tree definition if not already loaded
+    if (!loadTreeDefinition(treeName)) {
+        // Failed to load tree definition
         return "";
     }
     
@@ -694,6 +731,211 @@ bool LuaBehaviorTreeBridge::setTickCallback(const std::string& entityId, sol::pr
     std::lock_guard<std::mutex> lock(callbacksMutex_);
     asyncCallbacks_[entityId].onTick = callback;
     return true;
+}
+
+// ==================== Lazy Loading Implementation ====================
+
+bool LuaBehaviorTreeBridge::loadNodesRegistry(const std::string& registryPath) {
+    try {
+        // Load and execute the registry script
+        sol::load_result script = luaState_->load_file(registryPath);
+        if (!script.valid()) {
+            sol::error err = script;
+            lastError_ = std::string("Failed to load registry script: ") + err.what();
+            return false;
+        }
+
+        sol::protected_function_result result = script();
+        if (!result.valid()) {
+            sol::error err = result;
+            lastError_ = std::string("Failed to execute registry script: ") + err.what();
+            return false;
+        }
+
+        std::cout << "[LuaBehaviorTreeBridge] Loaded nodes registry from: " << registryPath << std::endl;
+        return true;
+
+    } catch (const std::exception& e) {
+        lastError_ = std::string("Failed to load nodes registry: ") + e.what();
+        return false;
+    }
+}
+
+// Helper function to scan a single XML file for BehaviorTree definitions
+static void scanXmlFileForTrees(const std::string& filePath,
+                                  std::unordered_map<std::string, std::string>& treePaths,
+                                  int& count) {
+    std::ifstream file(filePath);
+    if (!file.is_open()) return;
+
+    std::string line;
+    while (std::getline(file, line)) {
+        // Simple parsing: find <BehaviorTree ID="xxx">
+        size_t pos = line.find("<BehaviorTree");
+        if (pos != std::string::npos) {
+            size_t idPos = line.find("ID=\"", pos);
+            if (idPos != std::string::npos) {
+                size_t start = idPos + 4;
+                size_t end = line.find("\"", start);
+                if (end != std::string::npos) {
+                    std::string treeId = line.substr(start, end - start);
+                    treePaths[treeId] = filePath;
+                    count++;
+                }
+            }
+        }
+    }
+}
+
+// Helper function to recursively scan directory for XML files
+static void scanDirectoryRecursive(const std::string& directory,
+                                    std::unordered_map<std::string, std::string>& treePaths,
+                                    int& count) {
+#ifdef _WIN32
+    std::string searchPath = directory + "\\*";
+    WIN32_FIND_DATAA findData;
+    HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findData);
+
+    if (hFind == INVALID_HANDLE_VALUE) {
+        return;
+    }
+
+    do {
+        std::string name = findData.cFileName;
+
+        // Skip . and ..
+        if (name == "." || name == "..") continue;
+
+        std::string fullPath = directory + "\\" + name;
+
+        if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            // Recurse into subdirectory
+            scanDirectoryRecursive(fullPath, treePaths, count);
+        } else {
+            // Check if it's an XML file
+            if (name.size() > 4 && name.substr(name.size() - 4) == ".xml") {
+                scanXmlFileForTrees(fullPath, treePaths, count);
+            }
+        }
+    } while (FindNextFileA(hFind, &findData));
+
+    FindClose(hFind);
+#else
+    // Unix/Linux implementation using dirent.h
+    DIR* dir = opendir(directory.c_str());
+    if (!dir) return;
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        std::string name = entry->d_name;
+
+        // Skip . and ..
+        if (name == "." || name == "..") continue;
+
+        std::string fullPath = directory + "/" + name;
+
+        struct stat statbuf;
+        if (stat(fullPath.c_str(), &statbuf) == 0) {
+            if (S_ISDIR(statbuf.st_mode)) {
+                // Recurse into subdirectory
+                scanDirectoryRecursive(fullPath, treePaths, count);
+            } else if (S_ISREG(statbuf.st_mode)) {
+                // Check if it's an XML file
+                if (name.size() > 4 && name.substr(name.size() - 4) == ".xml") {
+                    scanXmlFileForTrees(fullPath, treePaths, count);
+                }
+            }
+        }
+    }
+
+    closedir(dir);
+#endif
+}
+
+bool LuaBehaviorTreeBridge::scanBehaviorTreeDefinitions(const std::string& directory) {
+    try {
+        // Check if directory exists using platform-specific method
+#ifdef _WIN32
+        DWORD attribs = GetFileAttributesA(directory.c_str());
+        if (attribs == INVALID_FILE_ATTRIBUTES || !(attribs & FILE_ATTRIBUTE_DIRECTORY)) {
+            lastError_ = "Directory does not exist or is not accessible: " + directory;
+            return false;
+        }
+#else
+        struct stat statbuf;
+        if (stat(directory.c_str(), &statbuf) != 0 || !S_ISDIR(statbuf.st_mode)) {
+            lastError_ = "Directory does not exist or is not accessible: " + directory;
+            return false;
+        }
+#endif
+
+        int count = 0;
+        scanDirectoryRecursive(directory, treeDefinitionPaths_, count);
+
+        std::cout << "[LuaBehaviorTreeBridge] Scanned " << count
+                  << " behavior tree definitions from " << directory << std::endl;
+        return true;
+
+    } catch (const std::exception& e) {
+        lastError_ = std::string("Failed to scan directory: ") + e.what();
+        return false;
+    }
+}
+
+bool LuaBehaviorTreeBridge::isTreeDefinitionAvailable(const std::string& treeName) {
+    // Already loaded
+    if (loadedTreeDefinitions_.count(treeName) > 0) {
+        return true;
+    }
+    // Can be loaded
+    return treeDefinitionPaths_.count(treeName) > 0;
+}
+
+bool LuaBehaviorTreeBridge::loadTreeDefinition(const std::string& treeName) {
+    // Already loaded, return immediately
+    if (loadedTreeDefinitions_.count(treeName) > 0) {
+        return true;
+    }
+
+    // Try to load the tree definition
+    return tryLoadTreeDefinition(treeName);
+}
+
+bool LuaBehaviorTreeBridge::tryLoadTreeDefinition(const std::string& treeName) {
+    // Look up file path from mapping
+    auto it = treeDefinitionPaths_.find(treeName);
+    if (it != treeDefinitionPaths_.end()) {
+        // Found mapping, load the file
+        if (loadBehaviorTreeFromFile(it->second)) {
+            loadedTreeDefinitions_.insert(treeName);
+            std::cout << "[LuaBehaviorTreeBridge] Lazy loaded: " << treeName
+                      << " from " << it->second << std::endl;
+            return true;
+        }
+        return false;
+    }
+
+    // No mapping found, try default path
+    std::string defaultPath = "bt_xml/" + treeName + ".xml";
+#ifdef _WIN32
+    DWORD attribs = GetFileAttributesA(defaultPath.c_str());
+    bool exists = (attribs != INVALID_FILE_ATTRIBUTES && !(attribs & FILE_ATTRIBUTE_DIRECTORY));
+#else
+    struct stat statbuf;
+    bool exists = (stat(defaultPath.c_str(), &statbuf) == 0 && S_ISREG(statbuf.st_mode));
+#endif
+    if (exists) {
+        if (loadBehaviorTreeFromFile(defaultPath)) {
+            loadedTreeDefinitions_.insert(treeName);
+            treeDefinitionPaths_[treeName] = defaultPath;
+            std::cout << "[LuaBehaviorTreeBridge] Lazy loaded: " << treeName
+                      << " from " << defaultPath << std::endl;
+            return true;
+        }
+    }
+
+    lastError_ = "Tree definition not found: " + treeName;
+    return false;
 }
 
 } // namespace scripting
