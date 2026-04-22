@@ -1,0 +1,82 @@
+<?xml version="1.0"?>
+<root main_tree_to_execute="LuaParamsTree">
+
+    <!--
+        Lua Nodes with Parameters Example
+        This XML demonstrates how to use LuaAction and LuaCondition nodes with custom parameters.
+        The parameters are passed to the Lua function as a table.
+    -->
+
+    <BehaviorTree ID="LuaParamsTree">
+        <Sequence name="lua_params_sequence">
+            <!--
+                LuaAction with parameters:
+                - lua_node_name: identifies which Lua function to call (must be registered first)
+                - entity_id: the entity to move (can use blackboard reference like {entity_id})
+                - target_x, target_y: destination coordinates
+                - speed: movement speed
+            -->
+            <LuaAction lua_node_name="LuaMoveTo"
+                       entity_id="{entity_id}"
+                       target_x="15"
+                       target_y="15"
+                       speed="3.0"/>
+
+            <!--
+                LuaCondition with parameters:
+                - lua_node_name: identifies which Lua condition function to call
+                - entity_id: the entity to check
+                - target_x, target_y: target position to check distance from
+                - max_distance: maximum allowed distance
+            -->
+            <LuaCondition lua_node_name="LuaCheckDistance"
+                          entity_id="{entity_id}"
+                          target_x="15"
+                          target_y="15"
+                          max_distance="2.0"/>
+
+            <!-- Wait action with duration parameter -->
+            <LuaAction lua_node_name="LuaWait"
+                       duration="1.0"/>
+
+            <!-- Patrol action with multiple parameters -->
+            <LuaAction lua_node_name="LuaPatrol"
+                       entity_id="{entity_id}"
+                       patrol_radius="5.0"
+                       num_points="6"/>
+        </Sequence>
+    </BehaviorTree>
+
+    <!-- Alternative tree with different parameter values -->
+    <BehaviorTree ID="LuaParamsTreeFast">
+        <Sequence name="fast_sequence">
+            <LuaAction lua_node_name="LuaMoveTo"
+                       entity_id="{entity_id}"
+                       target_x="20"
+                       target_y="20"
+                       speed="8.0"/>
+
+            <LuaCondition lua_node_name="LuaCheckDistance"
+                          entity_id="{entity_id}"
+                          target_x="20"
+                          target_y="20"
+                          max_distance="0.5"/>
+        </Sequence>
+    </BehaviorTree>
+
+    <!-- Tree demonstrating string parameters -->
+    <BehaviorTree ID="LuaParamsTreeString">
+        <Sequence name="string_params_sequence">
+            <!--
+                You can also pass string parameters.
+                The Lua function receives all parameters as strings in the params table.
+            -->
+            <LuaAction lua_node_name="LuaMoveTo"
+                       entity_id="{entity_id}"
+                       target_x="5"
+                       target_y="5"
+                       speed="1.5"/>
+        </Sequence>
+    </BehaviorTree>
+
+</root>

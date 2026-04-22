@@ -10,16 +10,53 @@ namespace scripting {
 // Static member initialization
 std::unordered_map<std::string, sol::protected_function> LuaActionNode::luaFunctions_;
 std::mutex LuaActionNode::mutex_;
+sol::state* LuaActionNode::luaState_ = nullptr;
 
 std::unordered_map<std::string, sol::protected_function> LuaConditionNode::luaFunctions_;
 std::mutex LuaConditionNode::mutex_;
+sol::state* LuaConditionNode::luaState_ = nullptr;
 
 // LuaActionNode implementation
 LuaActionNode::LuaActionNode(const std::string& name, const BT::NodeConfiguration& config)
     : SyncActionNode(name, config) {}
 
-BT::PortsList LuaActionNode::providedPorts() {
-    return { BT::InputPort<std::string>("lua_node_name") };
+sol::table LuaActionNode::collectInputPorts() {
+    sol::table params;
+    if (luaState_) {
+        params = luaState_->create_table();
+    } else {
+        return sol::nil;
+    }
+
+    // Iterate through all input ports and collect their values
+    for (const auto& port : config().input_ports) {
+        const std::string& portName = port.first;
+
+        // Skip the lua_node_name port as it's used to identify the function
+        if (portName == "lua_node_name") {
+            continue;
+        }
+
+        // Try to get the value as different types
+        // First try as string (most generic)
+        if (auto strVal = getInput<std::string>(portName)) {
+            params[portName] = strVal.value();
+        }
+        // Then try as double
+        else if (auto doubleVal = getInput<double>(portName)) {
+            params[portName] = doubleVal.value();
+        }
+        // Then try as int
+        else if (auto intVal = getInput<int>(portName)) {
+            params[portName] = intVal.value();
+        }
+        // Finally try as bool
+        else if (auto boolVal = getInput<bool>(portName)) {
+            params[portName] = boolVal.value();
+        }
+    }
+
+    return params;
 }
 
 BT::NodeStatus LuaActionNode::tick() {
@@ -28,29 +65,32 @@ BT::NodeStatus LuaActionNode::tick() {
         std::cerr << "[LuaActionNode] Missing lua_node_name port" << std::endl;
         return BT::NodeStatus::FAILURE;
     }
-    
+
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = luaFunctions_.find(nodeName.value());
     if (it == luaFunctions_.end()) {
         std::cerr << "[LuaActionNode] Lua function not found: " << nodeName.value() << std::endl;
         return BT::NodeStatus::FAILURE;
     }
-    
+
+    // Collect input parameters
+    sol::table params = collectInputPorts();
+
     sol::protected_function func = it->second;
-    auto result = func();
-    
+    auto result = func(params);
+
     if (!result.valid()) {
         sol::error err = result;
         std::cerr << "[LuaActionNode] Lua function error: " << err.what() << std::endl;
         return BT::NodeStatus::FAILURE;
     }
-    
+
     // Lua function should return "SUCCESS", "FAILURE", or "RUNNING"
     std::string status = result.get<std::string>();
     if (status == "SUCCESS") return BT::NodeStatus::SUCCESS;
     if (status == "FAILURE") return BT::NodeStatus::FAILURE;
     if (status == "RUNNING") return BT::NodeStatus::RUNNING;
-    
+
     return BT::NodeStatus::FAILURE;
 }
 
@@ -68,8 +108,43 @@ void LuaActionNode::clearLuaFunction(const std::string& nodeName) {
 LuaConditionNode::LuaConditionNode(const std::string& name, const BT::NodeConfiguration& config)
     : ConditionNode(name, config) {}
 
-BT::PortsList LuaConditionNode::providedPorts() {
-    return { BT::InputPort<std::string>("lua_node_name") };
+sol::table LuaConditionNode::collectInputPorts() {
+    sol::table params;
+    if (luaState_) {
+        params = luaState_->create_table();
+    } else {
+        return sol::nil;
+    }
+
+    // Iterate through all input ports and collect their values
+    for (const auto& port : config().input_ports) {
+        const std::string& portName = port.first;
+
+        // Skip the lua_node_name port as it's used to identify the function
+        if (portName == "lua_node_name") {
+            continue;
+        }
+
+        // Try to get the value as different types
+        // First try as string (most generic)
+        if (auto strVal = getInput<std::string>(portName)) {
+            params[portName] = strVal.value();
+        }
+        // Then try as double
+        else if (auto doubleVal = getInput<double>(portName)) {
+            params[portName] = doubleVal.value();
+        }
+        // Then try as int
+        else if (auto intVal = getInput<int>(portName)) {
+            params[portName] = intVal.value();
+        }
+        // Finally try as bool
+        else if (auto boolVal = getInput<bool>(portName)) {
+            params[portName] = boolVal.value();
+        }
+    }
+
+    return params;
 }
 
 BT::NodeStatus LuaConditionNode::tick() {
@@ -78,23 +153,26 @@ BT::NodeStatus LuaConditionNode::tick() {
         std::cerr << "[LuaConditionNode] Missing lua_node_name port" << std::endl;
         return BT::NodeStatus::FAILURE;
     }
-    
+
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = luaFunctions_.find(nodeName.value());
     if (it == luaFunctions_.end()) {
         std::cerr << "[LuaConditionNode] Lua function not found: " << nodeName.value() << std::endl;
         return BT::NodeStatus::FAILURE;
     }
-    
+
+    // Collect input parameters
+    sol::table params = collectInputPorts();
+
     sol::protected_function func = it->second;
-    auto result = func();
-    
+    auto result = func(params);
+
     if (!result.valid()) {
         sol::error err = result;
         std::cerr << "[LuaConditionNode] Lua function error: " << err.what() << std::endl;
         return BT::NodeStatus::FAILURE;
     }
-    
+
     // Lua function should return boolean
     bool condition = result.get<bool>();
     return condition ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
@@ -146,9 +224,13 @@ bool LuaBehaviorTreeBridge::initialize() {
 }
 
 void LuaBehaviorTreeBridge::registerLuaNodeTypes() {
+    // Set Lua state for parameter collection
+    LuaActionNode::setLuaState(luaState_);
+    LuaConditionNode::setLuaState(luaState_);
+
     // Register Lua action node type
     factory_->registerNodeType<LuaActionNode>("LuaAction");
-    
+
     // Register Lua condition node type
     factory_->registerNodeType<LuaConditionNode>("LuaCondition");
 }
