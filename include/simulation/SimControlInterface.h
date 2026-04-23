@@ -5,8 +5,6 @@
 #include <string>
 #include <vector>
 
-namespace simulation {
-
 // Simulation state enum
 enum SimState {
     STOPPED = 0,
@@ -105,8 +103,13 @@ public:
 
     // Utility
     static std::string stateToString(SimState state);
-};
 
-} // namespace simulation
+    // Singleton access - returns the implementation instance
+    static SimControlInterface* getInstance();
+    static void setInstance(SimControlInterface* instance);
+
+protected:
+    static SimControlInterface* instance_;
+};
 
 #endif // SIM_CONTROL_INTERFACE_H

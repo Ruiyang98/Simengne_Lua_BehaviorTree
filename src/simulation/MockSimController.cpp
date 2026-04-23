@@ -2,7 +2,34 @@
 #include "scripting/EntityScriptManager.h"
 #include <cmath>
 
-namespace simulation {
+// Initialize static member
+MockSimController* MockSimController::instance_ = nullptr;
+
+MockSimController* MockSimController::getInstance() {
+    return instance_;
+}
+
+void MockSimController::setInstance(MockSimController* instance) {
+    instance_ = instance;
+    // Also set the base class instance
+    SimControlInterface::setInstance(instance);
+}
+
+MockSimController* MockSimController::createInstance() {
+    if (!instance_) {
+        instance_ = new MockSimController();
+        SimControlInterface::setInstance(instance_);
+    }
+    return instance_;
+}
+
+void MockSimController::destroyInstance() {
+    if (instance_) {
+        delete instance_;
+        instance_ = nullptr;
+        SimControlInterface::setInstance(nullptr);
+    }
+}
 
 MockSimController::MockSimController()
     : state_(0)
@@ -163,7 +190,7 @@ void MockSimController::update(double deltaTime) {
     if (state_ == 1) {
         simTime_ = simTime_ + deltaTime * timeScale_;
         
-        // 更新脚本
+        // Update scripts
         updateScripts(deltaTime);
     }
 }
@@ -174,7 +201,7 @@ void MockSimController::updateScripts(double deltaTime) {
     if (scriptUpdateAccumulator_ >= SCRIPT_UPDATE_INTERVAL) {
         scriptUpdateAccumulator_ -= SCRIPT_UPDATE_INTERVAL;
         
-        // 遍历所有实体的脚本管理器并执行
+        // Execute all entity script managers
         for (auto& pair : entityScriptManagers_) {
             try {
                 pair.second->executeAllScripts();
@@ -200,7 +227,7 @@ std::shared_ptr<scripting::EntityScriptManager> MockSimController::createScriptM
         return entityScriptManagers_[entityId];
     }
     
-    auto manager = std::make_shared<scripting::EntityScriptManager>(entityId, this, btFactory_);
+    auto manager = std::make_shared<scripting::EntityScriptManager>(entityId, btFactory_);
     entityScriptManagers_[entityId] = manager;
     
     if (verbose_) {
@@ -432,5 +459,3 @@ double MockSimController::getEntityDistance(const VehicleID& entityId, double x,
 
     return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
-
-} // namespace simulation

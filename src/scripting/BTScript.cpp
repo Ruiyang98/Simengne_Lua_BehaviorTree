@@ -11,12 +11,10 @@ BTScript::BTScript(const std::string& name,
                    const std::string& treeName,
                    sol::state& luaState, 
                    const std::string& entityId,
-                   simulation::SimControlInterface* sim,
                    BT::BehaviorTreeFactory* factory)
     : Script(name, ScriptType::BEHAVIOR_TREE)
     , luaState_(luaState)
     , entityId_(entityId)
-    , simInterface_(sim)
     , factory_(factory)
     , xmlFile_(xmlFile)
     , treeName_(treeName)
@@ -89,7 +87,7 @@ bool BTScript::initializeBT() {
             // Try to parse entity ID as vehicle ID
             try {
                 int vehicleId = std::stoi(entityId_);
-                simulation::VehicleID vid;
+                VehicleID vid;
                 vid.address.site = 0;
                 vid.address.host = 0;
                 vid.vehicle = vehicleId;
@@ -118,7 +116,8 @@ void BTScript::execute() {
     // 1. Execute Lua logic (update blackboard, etc.)
     if (executeFunc_.valid()) {
         try {
-            auto result = executeFunc_(entityId_, simInterface_);
+            SimControlInterface* simInterface = SimControlInterface::getInstance();
+            auto result = executeFunc_(entityId_, simInterface);
             
             if (!result.valid()) {
                 sol::error err = result;

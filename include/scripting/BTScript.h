@@ -20,7 +20,6 @@ public:
              const std::string& treeName,
              sol::state& luaState, 
              const std::string& entityId,
-             simulation::SimControlInterface* sim,
              BT::BehaviorTreeFactory* factory);
     
     ~BTScript() override;
@@ -40,7 +39,6 @@ public:
 private:
     sol::state& luaState_;
     std::string entityId_;
-    simulation::SimControlInterface* simInterface_;
     BT::BehaviorTreeFactory* factory_;
     
     // Behavior tree related

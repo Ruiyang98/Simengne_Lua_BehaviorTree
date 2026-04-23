@@ -10,7 +10,6 @@
 #include "simulation/MockSimController.h"
 
 using namespace behaviortree;
-using namespace simulation;
 
 // 游戏引擎主循环模拟
 class GameEngineSimulator {
@@ -20,11 +19,11 @@ public:
     // 初始化
     bool initialize() {
         // 创建仿真控制器
-        simController_ = std::make_unique<MockSimController>();
+        simController_ = MockSimController::getInstance();
         simController_->setVerbose(true);
 
         // 创建行为树执行器
-        btExecutor_ = std::make_unique<BehaviorTreeExecutor>(simController_.get());
+        btExecutor_.reset(new BehaviorTreeExecutor());
         if (!btExecutor_->initialize()) {
             std::cerr << "Failed to initialize BT executor" << std::endl;
             return false;
@@ -35,11 +34,6 @@ public:
             std::cerr << "Failed to load behavior tree" << std::endl;
             return false;
         }
-
-        // 获取调度器并设置为手动模式
-        BehaviorTreeScheduler& scheduler = btExecutor_->getScheduler();
-        scheduler.setManualMode(true);  // 关键：设置为手动模式
-        scheduler.start();               // 启动（不会创建后台线程）
 
         std::cout << "[GameEngine] Initialized in MANUAL mode" << std::endl;
         std::cout << "[GameEngine] Tick interval: " << tickIntervalMs_ << "ms" << std::endl;
@@ -54,7 +48,10 @@ public:
         blackboard->set("entity_id", entityId);
 
         // 启动异步行为树
-        std::string treeId = btExecutor_->executeAsync(treeName, blackboard, tickIntervalMs_);
+        BT::Tree tree = btExecutor_->getFactory().createTree(treeName, blackboard);
+        std::string treeId = entityId;
+        BehaviorTreeScheduler::getInstance().registerEntityWithTreeAndInterval(
+            treeId, treeName, std::move(tree), tickIntervalMs_, blackboard);
 
         if (!treeId.empty()) {
             std::cout << "[GameEngine] Started behavior tree: " << treeId << std::endl;
@@ -93,8 +90,8 @@ public:
                 std::cout << "[GameEngine] Frame " << frameCount 
                           << " - Ticking behavior trees..." << std::endl;
 
-                // 关键：手动调用update()来tick所有行为树
-                btExecutor_->updateScheduler();
+                // 关键：手动调用tickAll()来tick所有行为树
+                BehaviorTreeScheduler::getInstance().tickAll();
 
                 lastTickTime = frameStart;
 
@@ -104,7 +101,7 @@ public:
             // ==================================
 
             // 检查是否所有行为树都已完成
-            if (frameCount > 0 && btExecutor_->listAsyncTrees().empty()) {
+            if (frameCount > 0 && BehaviorTreeScheduler::getInstance().getRegisteredEntityCount() == 0) {
                 std::cout << "[GameEngine] All behavior trees completed" << std::endl;
                 break;
             }
@@ -123,19 +120,19 @@ public:
 
     // 停止指定的行为树
     void stopBehaviorTree(const std::string& treeId) {
-        btExecutor_->stopAsync(treeId);
+        BehaviorTreeScheduler::getInstance().unregisterEntity(treeId);
     }
 
 private:
     void printTreeStatus() {
-        auto treeIds = btExecutor_->listAsyncTrees();
+        auto treeIds = BehaviorTreeScheduler::getInstance().getRegisteredEntityIds();
         if (treeIds.empty()) {
             std::cout << "  No active behavior trees" << std::endl;
             return;
         }
 
         for (const auto& treeId : treeIds) {
-            auto status = btExecutor_->getAsyncStatus(treeId);
+            auto status = BehaviorTreeScheduler::getInstance().getEntityStatus(treeId);
             std::string statusStr;
             switch (status) {
                 case BT::NodeStatus::SUCCESS: statusStr = "SUCCESS"; break;
@@ -148,7 +145,7 @@ private:
         }
     }
 
-    std::unique_ptr<MockSimController> simController_;
+    MockSimController* simController_;
     std::unique_ptr<BehaviorTreeExecutor> btExecutor_;
     std::atomic<bool> running_;
     int tickIntervalMs_;
@@ -162,10 +159,10 @@ void simpleManualModeExample() {
     std::cout << std::endl;
 
     // 创建组件
-    MockSimController simController;
-    simController.setVerbose(false);
+    MockSimController* simController = MockSimController::createInstance();
+    simController->setVerbose(false);
 
-    BehaviorTreeExecutor executor(&simController);
+    BehaviorTreeExecutor executor;
     if (!executor.initialize()) {
         std::cerr << "Failed to initialize" << std::endl;
         return;
@@ -178,26 +175,19 @@ void simpleManualModeExample() {
     }
 
     // 创建测试实体
-    std::string entityId = simController.addEntity("npc", 0, 0, 0);
-    std::cout << "Created entity: " << entityId << std::endl;
-
-    // 获取调度器并设置为手动模式
-    BehaviorTreeScheduler& scheduler = executor.getScheduler();
-    scheduler.setManualMode(true);  // 设置为手动模式
-    scheduler.start();
+    VehicleID entityId = simController->addEntity("npc", 0, 0, 0);
+    std::cout << "Created entity: vehicle=" << entityId.vehicle << std::endl;
 
     std::cout << "Scheduler started in MANUAL mode" << std::endl;
     std::cout << std::endl;
 
     // 启动异步行为树
     auto blackboard = BT::Blackboard::create();
-    blackboard->set("entity_id", entityId);
-
-    std::string treeId = executor.executeAsync("AsyncSquarePath", blackboard, 500);
-    if (treeId.empty()) {
-        std::cerr << "Failed to start behavior tree" << std::endl;
-        return;
-    }
+    blackboard->set("vehicle_id", entityId);
+    
+    BT::Tree tree = executor.getFactory().createTree("AsyncSquarePath", blackboard);
+    std::string treeId = std::to_string(entityId.vehicle);
+    BehaviorTreeScheduler::getInstance().registerEntityWithTreeAndInterval(treeId, "AsyncSquarePath", std::move(tree), 500, blackboard);
 
     std::cout << "Started behavior tree: " << treeId << std::endl;
     std::cout << "Ticking every 500ms..." << std::endl;
@@ -209,10 +199,10 @@ void simpleManualModeExample() {
         auto start = std::chrono::steady_clock::now();
 
         // 手动tick
-        executor.updateScheduler();
+        BehaviorTreeScheduler::getInstance().tickAll();
 
         // 检查状态
-        auto status = executor.getAsyncStatus(treeId);
+        auto status = BehaviorTreeScheduler::getInstance().getEntityStatus(treeId);
         std::cout << "Tick " << (i + 1) << " - Status: ";
         switch (status) {
             case BT::NodeStatus::RUNNING: std::cout << "RUNNING"; break;

@@ -27,7 +27,7 @@ struct TreeExecutionInfo {
 // Behavior tree executor: manages loading and execution of behavior trees
 class BehaviorTreeExecutor {
 public:
-    BehaviorTreeExecutor(simulation::SimControlInterface* simController);
+    BehaviorTreeExecutor();
     ~BehaviorTreeExecutor();
     
     // Initialize: register custom nodes
@@ -93,7 +93,6 @@ public:
     std::vector<std::string> getAsyncEntityIds() const;
 
 private:
-    simulation::SimControlInterface* simController_;
     BT::BehaviorTreeFactory factory_;
     std::string lastError_;
     bool initialized_;

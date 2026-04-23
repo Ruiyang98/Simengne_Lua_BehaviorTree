@@ -1,6 +1,15 @@
 #include "simulation/SimControlInterface.h"
 
-namespace simulation {
+// Initialize static member
+SimControlInterface* SimControlInterface::instance_ = nullptr;
+
+SimControlInterface* SimControlInterface::getInstance() {
+    return instance_;
+}
+
+void SimControlInterface::setInstance(SimControlInterface* instance) {
+    instance_ = instance;
+}
 
 std::string SimControlInterface::stateToString(SimState state) {
     switch (state) {
@@ -14,5 +23,3 @@ std::string SimControlInterface::stateToString(SimState state) {
             return "UNKNOWN";
     }
 }
-
-} // namespace simulation

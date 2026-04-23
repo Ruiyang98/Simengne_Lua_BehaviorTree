@@ -20,7 +20,6 @@ class EntityScriptManager {
 public:
     // Constructor
     EntityScriptManager(const std::string& entityId, 
-                        simulation::SimControlInterface* sim,
                         BT::BehaviorTreeFactory* factory);
     
     ~EntityScriptManager();
@@ -68,7 +67,6 @@ public:
     
 private:
     std::string entityId_;
-    simulation::SimControlInterface* simInterface_;
     BT::BehaviorTreeFactory* factory_;
     std::unordered_map<std::string, std::shared_ptr<Script>> scripts_;
     mutable std::mutex mutex_;

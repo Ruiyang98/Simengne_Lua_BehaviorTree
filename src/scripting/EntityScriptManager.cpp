@@ -6,10 +6,8 @@
 namespace scripting {
 
 EntityScriptManager::EntityScriptManager(const std::string& entityId, 
-                                         simulation::SimControlInterface* sim,
                                          BT::BehaviorTreeFactory* factory)
     : entityId_(entityId)
-    , simInterface_(sim)
     , factory_(factory) {
     
     initializeLuaState();
@@ -47,15 +45,15 @@ void EntityScriptManager::initializeLuaState() {
 
 void EntityScriptManager::registerLuaAPI() {
     // Register SimAddress type
-    luaState_.new_usertype<simulation::SimAddress>("SimAddress",
-        "site", &simulation::SimAddress::site,
-        "host", &simulation::SimAddress::host
+    luaState_.new_usertype<SimAddress>("SimAddress",
+        "site", &SimAddress::site,
+        "host", &SimAddress::host
     );
 
     // Register VehicleID type
-    luaState_.new_usertype<simulation::VehicleID>("VehicleID",
-        "address", &simulation::VehicleID::address,
-        "vehicle", &simulation::VehicleID::vehicle
+    luaState_.new_usertype<VehicleID>("VehicleID",
+        "address", &VehicleID::address,
+        "vehicle", &VehicleID::vehicle
     );
     
     // Create sim table
@@ -63,20 +61,21 @@ void EntityScriptManager::registerLuaAPI() {
     
     // Entity management functions
     simTable.set_function("get_entity_position", [this](const std::string& entityId) -> sol::optional<sol::table> {
-        if (!simInterface_) {
+        SimControlInterface* simInterface = SimControlInterface::getInstance();
+        if (!simInterface) {
             return sol::nullopt;
         }
         
         // Try to parse as vehicle ID
         try {
             int vehicleId = std::stoi(entityId);
-            simulation::VehicleID vid;
+            VehicleID vid;
             vid.address.site = 0;
             vid.address.host = 0;
             vid.vehicle = vehicleId;
             
             double x, y, z;
-            if (simInterface_->getEntityPosition(vid, x, y, z)) {
+            if (simInterface->getEntityPosition(vid, x, y, z)) {
                 sol::table pos = luaState_.create_table();
                 pos["x"] = x;
                 pos["y"] = y;
@@ -93,8 +92,9 @@ void EntityScriptManager::registerLuaAPI() {
     simTable.set_function("get_all_entities", [this]() -> sol::table {
         sol::table entities = luaState_.create_table();
         
-        if (simInterface_) {
-            auto entityList = simInterface_->getAllEntities();
+        SimControlInterface* simInterface = SimControlInterface::getInstance();
+        if (simInterface) {
+            auto entityList = simInterface->getAllEntities();
             for (size_t i = 0; i < entityList.size(); ++i) {
                 sol::table entity = luaState_.create_table();
                 entity["id"] = entityList[i].id.vehicle;
@@ -110,36 +110,38 @@ void EntityScriptManager::registerLuaAPI() {
     });
     
     simTable.set_function("move_entity", [this](const std::string& entityId, double x, double y, double z) -> bool {
-        if (!simInterface_) {
+        SimControlInterface* simInterface = SimControlInterface::getInstance();
+        if (!simInterface) {
             return false;
         }
         
         try {
             int vehicleId = std::stoi(entityId);
-            simulation::VehicleID vid;
+            VehicleID vid;
             vid.address.site = 0;
             vid.address.host = 0;
             vid.vehicle = vehicleId;
             
-            return simInterface_->moveEntity(vid, x, y, z);
+            return simInterface->moveEntity(vid, x, y, z);
         } catch (...) {
             return false;
         }
     });
     
     simTable.set_function("get_entity_distance", [this](const std::string& entityId, double x, double y, double z) -> double {
-        if (!simInterface_) {
+        SimControlInterface* simInterface = SimControlInterface::getInstance();
+        if (!simInterface) {
             return -1.0;
         }
         
         try {
             int vehicleId = std::stoi(entityId);
-            simulation::VehicleID vid;
+            VehicleID vid;
             vid.address.site = 0;
             vid.address.host = 0;
             vid.vehicle = vehicleId;
             
-            return simInterface_->getEntityDistance(vid, x, y, z);
+            return simInterface->getEntityDistance(vid, x, y, z);
         } catch (...) {
             return -1.0;
         }
@@ -171,7 +173,7 @@ bool EntityScriptManager::addTacticalScript(const std::string& scriptName, const
     
     try {
         auto script = std::make_shared<TacticalScript>(
-            scriptName, scriptCode, luaState_, entityId_, simInterface_);
+            scriptName, scriptCode, luaState_, entityId_);
         
         scripts_[scriptName] = script;
         std::cout << "[EntityScriptManager] Added tactical script '" << scriptName 
@@ -212,7 +214,7 @@ bool EntityScriptManager::addBTScript(const std::string& scriptName,
     try {
         auto script = std::make_shared<BTScript>(
             scriptName, scriptCode, xmlFile, treeName,
-            luaState_, entityId_, simInterface_, factory_);
+            luaState_, entityId_, factory_);
         
         scripts_[scriptName] = script;
         std::cout << "[EntityScriptManager] Added BT script '" << scriptName 

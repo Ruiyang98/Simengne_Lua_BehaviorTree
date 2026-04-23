@@ -6,12 +6,10 @@ namespace scripting {
 TacticalScript::TacticalScript(const std::string& name, 
                                const std::string& scriptCode,
                                sol::state& luaState, 
-                               const std::string& entityId,
-                               simulation::SimControlInterface* sim)
+                               const std::string& entityId)
     : Script(name, ScriptType::TACTICAL)
     , luaState_(luaState)
     , entityId_(entityId)
-    , simInterface_(sim)
     , executeFunc_(sol::nil) {
     
     if (!initializeScript(scriptCode)) {
@@ -54,7 +52,8 @@ void TacticalScript::execute() {
     
     try {
         // Call Lua execute function with entity_id and sim
-        auto result = executeFunc_(entityId_, simInterface_);
+        SimControlInterface* simInterface = SimControlInterface::getInstance();
+        auto result = executeFunc_(entityId_, simInterface);
         
         if (!result.valid()) {
             sol::error err = result;

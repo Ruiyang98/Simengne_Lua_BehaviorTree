@@ -15,12 +15,10 @@
 #include "behaviortree/BehaviorTreeScheduler.h"
 
 
-using namespace simulation;
 using namespace scripting;
 using namespace behaviortree;
 
-// Global simulation controller and BT executor
-std::unique_ptr<MockSimController> g_simController;
+// Global BT executor
 std::unique_ptr<BehaviorTreeExecutor> g_btExecutor;
 
 // Trim whitespace from both ends of a string
@@ -99,13 +97,20 @@ bool executeBehaviorTree(const std::string& xmlFile, const std::string& treeName
     // Create blackboard and set parameters
     auto blackboard = BT::Blackboard::create();
 
+    // Get sim controller
+    MockSimController* simController = MockSimController::getInstance();
+    if (!simController) {
+        std::cerr << "ERROR: SimController not available" << std::endl;
+        return false;
+    }
+
     // Use specified entity ID or find/create one
     VehicleID vehicleId;
     if (!entityIdStr.empty()) {
         // Parse entity ID from string (format: "vehicle_<number>")
         // For now, we search for matching vehicle number
         int targetVehicle = std::stoi(entityIdStr);
-        auto entities = g_simController->getAllEntities();
+        auto entities = simController->getAllEntities();
         bool found = false;
         for (const auto& entity : entities) {
             if (entity.id.vehicle == targetVehicle) {
@@ -122,14 +127,14 @@ bool executeBehaviorTree(const std::string& xmlFile, const std::string& treeName
         std::cout << "INFO: Using specified entity: vehicle=" << vehicleId.vehicle << std::endl;
     } else {
         // Try to get an existing entity
-        auto entities = g_simController->getAllEntities();
+        auto entities = simController->getAllEntities();
         if (!entities.empty()) {
             vehicleId = entities[0].id;
             blackboard->set("vehicle_id", vehicleId);
             std::cout << "INFO: Using existing entity: vehicle=" << vehicleId.vehicle << std::endl;
         } else {
             // Create a test entity
-            vehicleId = g_simController->addEntity("npc", 0.0, 0.0, 0.0);
+            vehicleId = simController->addEntity("npc", 0.0, 0.0, 0.0);
             blackboard->set("vehicle_id", vehicleId);
             std::cout << "INFO: Created test entity: vehicle=" << vehicleId.vehicle << std::endl;
         }
@@ -155,7 +160,12 @@ bool executeBehaviorTree(const std::string& xmlFile, const std::string& treeName
 
 // List all entities
 void listEntities() {
-    auto entities = g_simController->getAllEntities();
+    MockSimController* simController = MockSimController::getInstance();
+    if (!simController) {
+        std::cerr << "ERROR: SimController not available" << std::endl;
+        return;
+    }
+    auto entities = simController->getAllEntities();
     std::cout << "Entities (" << entities.size() << "):" << std::endl;
     for (const auto& entity : entities) {
         std::cout << "  - vehicle=" << entity.id.vehicle << " (" << entity.type << ") at ("
@@ -170,12 +180,18 @@ void addEntity(const std::vector<std::string>& args) {
         return;
     }
 
+    MockSimController* simController = MockSimController::getInstance();
+    if (!simController) {
+        std::cerr << "ERROR: SimController not available" << std::endl;
+        return;
+    }
+
     std::string type = args[2];
     double x = std::stod(args[3]);
     double y = std::stod(args[4]);
     double z = (args.size() > 5) ? std::stod(args[5]) : 0.0;
 
-    VehicleID id = g_simController->addEntity(type, x, y, z);
+    VehicleID id = simController->addEntity(type, x, y, z);
     std::cout << "Created entity: vehicle=" << id.vehicle << " at (" << x << ", " << y << ", " << z << ")" << std::endl;
 }
 
@@ -276,9 +292,16 @@ bool executeAsyncBehaviorTree(const std::string& xmlFile, const std::string& ent
     // Create blackboard and set parameters
     auto blackboard = BT::Blackboard::create();
 
+    // Get sim controller
+    MockSimController* simController = MockSimController::getInstance();
+    if (!simController) {
+        std::cerr << "ERROR: SimController not available" << std::endl;
+        return false;
+    }
+
     // Parse entity ID from string and verify the entity exists
     int targetVehicle = std::stoi(entityIdStr);
-    auto entities = g_simController->getAllEntities();
+    auto entities = simController->getAllEntities();
     VehicleID vehicleId;
     bool found = false;
     for (const auto& entity : entities) {
@@ -503,12 +526,12 @@ void runInteractiveMode(LuaSimBinding* luaBinding) {
 }
 
 int main(int argc, char* argv[]) {
-    // Create simulation controller
-    g_simController.reset(new MockSimController());
-    g_simController->setVerbose(true);
+    // Create simulation controller singleton
+    MockSimController* simController = MockSimController::createInstance();
+    simController->setVerbose(true);
     
     // Create behavior tree executor
-    g_btExecutor.reset(new BehaviorTreeExecutor(g_simController.get()));
+    g_btExecutor.reset(new BehaviorTreeExecutor());
     if (!g_btExecutor->initialize()) {
         std::cerr << "ERROR: Failed to initialize behavior tree executor: " 
                   << g_btExecutor->getLastError() << std::endl;
@@ -525,7 +548,7 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl;
 
     // Create Lua binding
-    std::unique_ptr<LuaSimBinding> luaBinding(new LuaSimBinding(g_simController.get()));
+    std::unique_ptr<LuaSimBinding> luaBinding(new LuaSimBinding());
 
     // Initialize Lua environment
     if (!luaBinding->initialize()) {
@@ -544,7 +567,7 @@ int main(int argc, char* argv[]) {
     }
     
     // Set BehaviorTreeFactory for script manager support
-    g_simController->setBehaviorTreeFactory(&g_btExecutor->getFactory());
+    simController->setBehaviorTreeFactory(&g_btExecutor->getFactory());
     std::cout << "OK: Script manager support initialized" << std::endl;
     std::cout << std::endl;
 
@@ -559,7 +582,9 @@ int main(int argc, char* argv[]) {
     // Cleanup
     luaBinding.reset();
     g_btExecutor.reset();
-    g_simController.reset();
+    
+    // Clean up singleton
+    MockSimController::destroyInstance();
 
     return 0;
 }

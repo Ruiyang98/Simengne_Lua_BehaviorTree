@@ -15,12 +15,15 @@ namespace scripting {
     class EntityScriptManager;
 }
 
-namespace simulation {
-
 class MockSimController : public SimControlInterface {
 public:
-    MockSimController();
-    ~MockSimController();
+    // Singleton access
+    static MockSimController* getInstance();
+    static void setInstance(MockSimController* instance);
+    
+    // Create instance (for initial setup)
+    static MockSimController* createInstance();
+    static void destroyInstance();
 
     // Control commands
     bool start();
@@ -74,6 +77,14 @@ public:
     std::vector<std::string> getManagedEntityIds() const;
 
 private:
+    // Private constructor for singleton
+    MockSimController();
+    ~MockSimController();
+
+    // Disable copy and assignment
+    MockSimController(const MockSimController&) = delete;
+    MockSimController& operator=(const MockSimController&) = delete;
+
     void runSimulationLoop();
     void notifyStart();
     void notifyPause();
@@ -81,6 +92,9 @@ private:
     void notifyStop();
     void notifyReset();
     VehicleID generateVehicleId();
+
+    // Singleton instance
+    static MockSimController* instance_;
 
     // State
     volatile int state_;
@@ -116,7 +130,5 @@ private:
     double scriptUpdateAccumulator_;
     static constexpr double SCRIPT_UPDATE_INTERVAL = 0.5; // 500ms
 };
-
-} // namespace simulation
 
 #endif // MOCK_SIM_CONTROLLER_H

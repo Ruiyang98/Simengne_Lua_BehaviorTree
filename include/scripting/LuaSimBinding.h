@@ -16,7 +16,7 @@ class LuaBehaviorTreeBridge;
 
 class LuaSimBinding {
 public:
-    explicit LuaSimBinding(simulation::SimControlInterface* simInterface);
+    LuaSimBinding();
     ~LuaSimBinding();
 
     bool initialize();
@@ -39,7 +39,6 @@ private:
     void registerUtilityFunctions();
     void setupCallbacks();
 
-    simulation::SimControlInterface* simInterface_;
     std::unique_ptr<sol::state> luaState_;
     std::unique_ptr<LuaBehaviorTreeBridge> btBridge_;
     bool initialized_;

@@ -14,7 +14,6 @@
 #include "simulation/MockSimController.h"
 
 using namespace behaviortree;
-using namespace simulation;
 
 // ============================================================================
 // 方案1: 最简单的集成方式 - 在现有代码中添加定时tick
@@ -26,10 +25,6 @@ public:
     bool init(BehaviorTreeExecutor* executor, int tickIntervalMs = 500) {
         executor_ = executor;
         tickIntervalMs_ = tickIntervalMs;
-
-        // 设置为手动模式
-        executor_->setSchedulerManualMode(true);
-        executor_->startScheduler();
 
         std::cout << "[SimpleManualTick] Initialized with " << tickIntervalMs_ << "ms interval" << std::endl;
         return true;
@@ -43,7 +38,7 @@ public:
         // 检查是否到了tick时间
         if (elapsed.count() >= tickIntervalMs_) {
             // 执行一次行为树tick
-            executor_->updateScheduler();
+            BehaviorTreeScheduler::getInstance().tickAll();
 
             lastTickTime_ = now;
 
@@ -59,9 +54,9 @@ public:
 
 private:
     void printStatus() {
-        auto treeIds = executor_->listAsyncTrees();
-        if (!treeIds.empty()) {
-            std::cout << "[ManualTick] Active trees: " << treeIds.size() << std::endl;
+        auto entityIds = BehaviorTreeScheduler::getInstance().getRegisteredEntityIds();
+        if (!entityIds.empty()) {
+            std::cout << "[ManualTick] Active trees: " << entityIds.size() << std::endl;
         }
     }
 
@@ -85,10 +80,6 @@ public:
     bool init(BehaviorTreeExecutor* executor, int tickIntervalMs = 500) {
         executor_ = executor;
         tickIntervalMs_ = tickIntervalMs;
-
-        // 设置为手动模式
-        executor_->setSchedulerManualMode(true);
-        executor_->startScheduler();
 
         return true;
     }
@@ -118,7 +109,7 @@ private:
 
             // 执行tick
             if (executor_) {
-                executor_->updateScheduler();
+                BehaviorTreeScheduler::getInstance().tickAll();
             }
 
             // 精确睡眠
@@ -147,10 +138,10 @@ void gameLoopExample() {
     std::cout << std::endl;
 
     // 1. 初始化组件
-    MockSimController simController;
-    simController.setVerbose(false);
+    MockSimController* simController = MockSimController::createInstance();
+    simController->setVerbose(false);
 
-    BehaviorTreeExecutor executor(&simController);
+    BehaviorTreeExecutor executor;
     if (!executor.initialize()) {
         std::cerr << "Failed to initialize" << std::endl;
         return;
@@ -163,18 +154,16 @@ void gameLoopExample() {
     }
 
     // 3. 创建实体
-    std::string entityId = simController.addEntity("npc", 0, 0, 0);
-    std::cout << "Created entity: " << entityId << std::endl;
+    VehicleID entityId = simController->addEntity("npc", 0, 0, 0);
+    std::cout << "Created entity: vehicle=" << entityId.vehicle << std::endl;
 
     // 4. 启动异步行为树
     auto blackboard = BT::Blackboard::create();
-    blackboard->set("entity_id", entityId);
-    std::string treeId = executor.executeAsync("AsyncSquarePath", blackboard, 500);
-
-    if (treeId.empty()) {
-        std::cerr << "Failed to start behavior tree" << std::endl;
-        return;
-    }
+    blackboard->set("vehicle_id", entityId);
+    
+    BT::Tree tree = executor.getFactory().createTree("AsyncSquarePath", blackboard);
+    std::string treeId = std::to_string(entityId.vehicle);
+    BehaviorTreeScheduler::getInstance().registerEntityWithTreeAndInterval(treeId, "AsyncSquarePath", std::move(tree), 500, blackboard);
 
     std::cout << "Started behavior tree: " << treeId << std::endl;
     std::cout << std::endl;
@@ -217,13 +206,13 @@ void gameLoopExample() {
             tickCount++;
             std::cout << "[Tick " << tickCount << "] Updating behavior trees..." << std::endl;
 
-            // 关键：手动调用updateScheduler()
-            executor.updateScheduler();
+            // 关键：手动调用tickAll()
+            BehaviorTreeScheduler::getInstance().tickAll();
 
             lastTickTime = frameStart;
 
             // 检查行为树是否完成
-            auto status = executor.getAsyncStatus(treeId);
+            auto status = BehaviorTreeScheduler::getInstance().getEntityStatus(treeId);
             if (status != BT::NodeStatus::RUNNING) {
                 std::cout << "Behavior tree completed!" << std::endl;
                 running = false;
@@ -250,17 +239,19 @@ void simpleIntegrationExample() {
     std::cout << std::endl;
 
     // 初始化
-    MockSimController simController;
-    BehaviorTreeExecutor executor(&simController);
+    MockSimController* simController = MockSimController::getInstance();
+    BehaviorTreeExecutor executor;
     executor.initialize();
     executor.loadFromFile("bt_xml/async_square_path.xml");
 
-    std::string entityId = simController.addEntity("npc", 0, 0, 0);
+    VehicleID entityId = simController->addEntity("npc", 0, 0, 0);
 
     // 启动行为树
     auto blackboard = BT::Blackboard::create();
-    blackboard->set("entity_id", entityId);
-    std::string treeId = executor.executeAsync("AsyncSquarePath", blackboard, 500);
+    blackboard->set("vehicle_id", entityId);
+    BT::Tree tree = executor.getFactory().createTree("AsyncSquarePath", blackboard);
+    std::string treeId = std::to_string(entityId.vehicle);
+    BehaviorTreeScheduler::getInstance().registerEntityWithTreeAndInterval(treeId, "AsyncSquarePath", std::move(tree), 500, blackboard);
 
     // 创建手动tick管理器
     SimpleManualTick manualTick;
@@ -273,7 +264,7 @@ void simpleIntegrationExample() {
         manualTick.update();
 
         // 检查是否完成
-        if (executor.getAsyncStatus(treeId) != BT::NodeStatus::RUNNING) {
+        if (BehaviorTreeScheduler::getInstance().getEntityStatus(treeId) != BT::NodeStatus::RUNNING) {
             std::cout << "Behavior tree completed!" << std::endl;
             break;
         }

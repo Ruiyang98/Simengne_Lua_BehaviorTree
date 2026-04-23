@@ -10,27 +10,27 @@
 
 namespace scripting {
 
-LuaSimBinding::LuaSimBinding(simulation::SimControlInterface* simInterface)
-    : simInterface_(simInterface)
-    , initialized_(false) {
+LuaSimBinding::LuaSimBinding()
+    : initialized_(false) {
 }
 
 LuaSimBinding::~LuaSimBinding() {
     // Clear callbacks to prevent dangling references
-    if (simInterface_) {
-        simInterface_->setOnStartCallback(nullptr);
-        simInterface_->setOnPauseCallback(nullptr);
-        simInterface_->setOnResumeCallback(nullptr);
-        simInterface_->setOnStopCallback(nullptr);
-        simInterface_->setOnResetCallback(nullptr);
+    SimControlInterface* simInterface = SimControlInterface::getInstance();
+    if (simInterface) {
+        simInterface->setOnStartCallback(nullptr);
+        simInterface->setOnPauseCallback(nullptr);
+        simInterface->setOnResumeCallback(nullptr);
+        simInterface->setOnStopCallback(nullptr);
+        simInterface->setOnResetCallback(nullptr);
     }
     // Clear Lua callbacks before destroying Lua state
     luaCallbacks_.clear();
 }
 
 bool LuaSimBinding::initialize() {
-    if (!simInterface_) {
-        lastError_ = "SimControlInterface pointer is null";
+    if (!SimControlInterface::getInstance()) {
+        lastError_ = "SimControlInterface instance is null";
         return false;
     }
 
@@ -117,110 +117,129 @@ void LuaSimBinding::registerFunctions() {
 }
 
 void LuaSimBinding::registerSimAPI() {
+    SimControlInterface* simInterface = SimControlInterface::getInstance();
+
     // Register SimAddress type
-    luaState_->new_usertype<simulation::SimAddress>("SimAddress",
-        "site", &simulation::SimAddress::site,
-        "host", &simulation::SimAddress::host
+    luaState_->new_usertype<SimAddress>("SimAddress",
+        "site", &SimAddress::site,
+        "host", &SimAddress::host
     );
 
     // Register VehicleID type
-    luaState_->new_usertype<simulation::VehicleID>("VehicleID",
-        "address", &simulation::VehicleID::address,
-        "vehicle", &simulation::VehicleID::vehicle
+    luaState_->new_usertype<VehicleID>("VehicleID",
+        "address", &VehicleID::address,
+        "vehicle", &VehicleID::vehicle
     );
 
     // Create sim table
     sol::table simTable = luaState_->create_named_table("sim");
 
     // Control commands
-    simTable.set_function("start", [this]() -> bool {
-        return simInterface_ ? simInterface_->start() : false;
+    simTable.set_function("start", []() -> bool {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        return sim ? sim->start() : false;
     });
 
-    simTable.set_function("pause", [this]() -> bool {
-        return simInterface_ ? simInterface_->pause() : false;
+    simTable.set_function("pause", []() -> bool {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        return sim ? sim->pause() : false;
     });
 
-    simTable.set_function("resume", [this]() -> bool {
-        return simInterface_ ? simInterface_->resume() : false;
+    simTable.set_function("resume", []() -> bool {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        return sim ? sim->resume() : false;
     });
 
-    simTable.set_function("stop", [this]() -> bool {
-        return simInterface_ ? simInterface_->stop() : false;
+    simTable.set_function("stop", []() -> bool {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        return sim ? sim->stop() : false;
     });
 
-    simTable.set_function("reset", [this]() -> bool {
-        return simInterface_ ? simInterface_->reset() : false;
+    simTable.set_function("reset", []() -> bool {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        return sim ? sim->reset() : false;
     });
 
     // State queries
-    simTable.set_function("get_state", [this]() -> std::string {
-        if (simInterface_) {
-            return simulation::SimControlInterface::stateToString(simInterface_->getState());
+    simTable.set_function("get_state", []() -> std::string {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim) {
+            return SimControlInterface::stateToString(sim->getState());
         }
         return "UNKNOWN";
     });
 
-    simTable.set_function("is_running", [this]() -> bool {
-        return simInterface_ ? simInterface_->isRunning() : false;
+    simTable.set_function("is_running", []() -> bool {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        return sim ? sim->isRunning() : false;
     });
 
-    simTable.set_function("is_paused", [this]() -> bool {
-        return simInterface_ ? simInterface_->isPaused() : false;
+    simTable.set_function("is_paused", []() -> bool {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        return sim ? sim->isPaused() : false;
     });
 
-    simTable.set_function("is_stopped", [this]() -> bool {
-        return simInterface_ ? simInterface_->isStopped() : false;
+    simTable.set_function("is_stopped", []() -> bool {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        return sim ? sim->isStopped() : false;
     });
 
-    simTable.set_function("get_time", [this]() -> double {
-        return simInterface_ ? simInterface_->getSimTime() : 0.0;
+    simTable.set_function("get_time", []() -> double {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        return sim ? sim->getSimTime() : 0.0;
     });
 
-    simTable.set_function("get_time_step", [this]() -> double {
-        return simInterface_ ? simInterface_->getTimeStep() : 0.0;
+    simTable.set_function("get_time_step", []() -> double {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        return sim ? sim->getTimeStep() : 0.0;
     });
 
     // Speed control
-    simTable.set_function("set_speed", [this](double scale) {
-        if (simInterface_) {
-            simInterface_->setTimeScale(scale);
+    simTable.set_function("set_speed", [](double scale) {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim) {
+            sim->setTimeScale(scale);
         }
     });
 
-    simTable.set_function("get_speed", [this]() -> double {
-        return simInterface_ ? simInterface_->getTimeScale() : 1.0;
+    simTable.set_function("get_speed", []() -> double {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        return sim ? sim->getTimeScale() : 1.0;
     });
 
     // Entity management
-    simTable.set_function("add_entity", [this](const std::string& type, double x, double y, double z) -> simulation::VehicleID {
-        if (simInterface_) {
-            return simInterface_->addEntity(type, x, y, z);
+    simTable.set_function("add_entity", [](const std::string& type, double x, double y, double z) -> VehicleID {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim) {
+            return sim->addEntity(type, x, y, z);
         }
-        return simulation::VehicleID{};
+        return VehicleID{};
     });
 
-    simTable.set_function("remove_entity", [this](const simulation::VehicleID& vehicleId) -> bool {
-        if (simInterface_) {
-            return simInterface_->removeEntity(vehicleId);
-        }
-        return false;
-    });
-
-    simTable.set_function("move_entity", [this](const simulation::VehicleID& vehicleId, double x, double y, double z) -> bool {
-        if (simInterface_) {
-            return simInterface_->moveEntity(vehicleId, x, y, z);
+    simTable.set_function("remove_entity", [](const VehicleID& vehicleId) -> bool {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim) {
+            return sim->removeEntity(vehicleId);
         }
         return false;
     });
 
-    simTable.set_function("get_entity_position", [this](const simulation::VehicleID& vehicleId) -> sol::optional<sol::table> {
-        if (!simInterface_) {
+    simTable.set_function("move_entity", [](const VehicleID& vehicleId, double x, double y, double z) -> bool {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim) {
+            return sim->moveEntity(vehicleId, x, y, z);
+        }
+        return false;
+    });
+
+    simTable.set_function("get_entity_position", [this](const VehicleID& vehicleId) -> sol::optional<sol::table> {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (!sim) {
             return sol::nullopt;
         }
 
         double x, y, z;
-        if (simInterface_->getEntityPosition(vehicleId, x, y, z)) {
+        if (sim->getEntityPosition(vehicleId, x, y, z)) {
             sol::table pos = luaState_->create_table();
             pos["x"] = x;
             pos["y"] = y;
@@ -233,8 +252,9 @@ void LuaSimBinding::registerSimAPI() {
     simTable.set_function("get_all_entities", [this]() -> sol::table {
         sol::table entities = luaState_->create_table();
 
-        if (simInterface_) {
-            auto entityList = simInterface_->getAllEntities();
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim) {
+            auto entityList = sim->getAllEntities();
             for (size_t i = 0; i < entityList.size(); ++i) {
                 sol::table entity = luaState_->create_table();
                 entity["id"] = entityList[i].id;
@@ -249,36 +269,40 @@ void LuaSimBinding::registerSimAPI() {
         return entities;
     });
 
-    simTable.set_function("get_entity_count", [this]() -> int {
-        if (simInterface_) {
-            return static_cast<int>(simInterface_->getEntityCount());
+    simTable.set_function("get_entity_count", []() -> int {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim) {
+            return static_cast<int>(sim->getEntityCount());
         }
         return 0;
     });
 
     // Set entity move direction
-    simTable.set_function("set_entity_move_direction", [this](const simulation::VehicleID& vehicleId, double dx, double dy, double dz) -> bool {
-        if (simInterface_) {
-            return simInterface_->setEntityMoveDirection(vehicleId, dx, dy, dz);
+    simTable.set_function("set_entity_move_direction", [](const VehicleID& vehicleId, double dx, double dy, double dz) -> bool {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim) {
+            return sim->setEntityMoveDirection(vehicleId, dx, dy, dz);
         }
         return false;
     });
 
     // Get entity distance to target point
-    simTable.set_function("get_entity_distance", [this](const simulation::VehicleID& vehicleId, double x, double y, double z) -> double {
-        if (simInterface_) {
-            return simInterface_->getEntityDistance(vehicleId, x, y, z);
+    simTable.set_function("get_entity_distance", [](const VehicleID& vehicleId, double x, double y, double z) -> double {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim) {
+            return sim->getEntityDistance(vehicleId, x, y, z);
         }
         return -1.0;
     });
 
     // Event callbacks
     simTable.set_function("on_start", [this](sol::function callback) {
-        if (simInterface_ && callback.valid()) {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim && callback.valid()) {
             sol::protected_function protectedCallback = callback;
             luaCallbacks_.push_back(protectedCallback);
             
-            simInterface_->setOnStartCallback([protectedCallback]() {
+            sim->setOnStartCallback([protectedCallback]() {
                 auto result = protectedCallback();
                 if (!result.valid()) {
                     sol::error err = result;
@@ -289,11 +313,12 @@ void LuaSimBinding::registerSimAPI() {
     });
 
     simTable.set_function("on_pause", [this](sol::function callback) {
-        if (simInterface_ && callback.valid()) {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim && callback.valid()) {
             sol::protected_function protectedCallback = callback;
             luaCallbacks_.push_back(protectedCallback);
             
-            simInterface_->setOnPauseCallback([protectedCallback]() {
+            sim->setOnPauseCallback([protectedCallback]() {
                 auto result = protectedCallback();
                 if (!result.valid()) {
                     sol::error err = result;
@@ -304,11 +329,12 @@ void LuaSimBinding::registerSimAPI() {
     });
 
     simTable.set_function("on_resume", [this](sol::function callback) {
-        if (simInterface_ && callback.valid()) {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim && callback.valid()) {
             sol::protected_function protectedCallback = callback;
             luaCallbacks_.push_back(protectedCallback);
             
-            simInterface_->setOnResumeCallback([protectedCallback]() {
+            sim->setOnResumeCallback([protectedCallback]() {
                 auto result = protectedCallback();
                 if (!result.valid()) {
                     sol::error err = result;
@@ -319,11 +345,12 @@ void LuaSimBinding::registerSimAPI() {
     });
 
     simTable.set_function("on_stop", [this](sol::function callback) {
-        if (simInterface_ && callback.valid()) {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim && callback.valid()) {
             sol::protected_function protectedCallback = callback;
             luaCallbacks_.push_back(protectedCallback);
             
-            simInterface_->setOnStopCallback([protectedCallback]() {
+            sim->setOnStopCallback([protectedCallback]() {
                 auto result = protectedCallback();
                 if (!result.valid()) {
                     sol::error err = result;
@@ -334,11 +361,12 @@ void LuaSimBinding::registerSimAPI() {
     });
 
     simTable.set_function("on_reset", [this](sol::function callback) {
-        if (simInterface_ && callback.valid()) {
+        SimControlInterface* sim = SimControlInterface::getInstance();
+        if (sim && callback.valid()) {
             sol::protected_function protectedCallback = callback;
             luaCallbacks_.push_back(protectedCallback);
             
-            simInterface_->setOnResetCallback([protectedCallback]() {
+            sim->setOnResetCallback([protectedCallback]() {
                 auto result = protectedCallback();
                 if (!result.valid()) {
                     sol::error err = result;
@@ -350,10 +378,9 @@ void LuaSimBinding::registerSimAPI() {
 
     // Script manager API
     simTable.set_function("create_script_manager", [this](const std::string& entityId) -> sol::optional<sol::table> {
-        // 尝试将simInterface转换为MockSimController
-        simulation::MockSimController* mockSim = dynamic_cast<simulation::MockSimController*>(simInterface_);
+        MockSimController* mockSim = MockSimController::getInstance();
         if (!mockSim) {
-            std::cerr << "[LuaSimBinding] Failed to cast SimControlInterface to MockSimController" << std::endl;
+            std::cerr << "[LuaSimBinding] MockSimController instance is null" << std::endl;
             return sol::nullopt;
         }
         
@@ -362,10 +389,10 @@ void LuaSimBinding::registerSimAPI() {
             return sol::nullopt;
         }
         
-        // 创建脚本管理器表
+        // Create script manager table
         sol::table managerTable = luaState_->create_table();
         
-        // 添加方法
+        // Add methods
         managerTable.set_function("add_tactical_script", [manager](const std::string& scriptName, const std::string& scriptCode) -> bool {
             return manager->addTacticalScript(scriptName, scriptCode);
         });
@@ -409,8 +436,8 @@ void LuaSimBinding::registerSimAPI() {
         return managerTable;
     });
     
-    simTable.set_function("remove_script_manager", [this](const std::string& entityId) -> bool {
-        simulation::MockSimController* mockSim = dynamic_cast<simulation::MockSimController*>(simInterface_);
+    simTable.set_function("remove_script_manager", [](const std::string& entityId) -> bool {
+        MockSimController* mockSim = MockSimController::getInstance();
         if (!mockSim) {
             return false;
         }
@@ -418,7 +445,7 @@ void LuaSimBinding::registerSimAPI() {
     });
     
     simTable.set_function("get_script_manager", [this](const std::string& entityId) -> sol::optional<sol::table> {
-        simulation::MockSimController* mockSim = dynamic_cast<simulation::MockSimController*>(simInterface_);
+        MockSimController* mockSim = MockSimController::getInstance();
         if (!mockSim) {
             return sol::nullopt;
         }
@@ -428,7 +455,7 @@ void LuaSimBinding::registerSimAPI() {
             return sol::nullopt;
         }
         
-        // 创建脚本管理器表（同上）
+        // Create script manager table
         sol::table managerTable = luaState_->create_table();
         
         managerTable.set_function("add_tactical_script", [manager](const std::string& scriptName, const std::string& scriptCode) -> bool {
@@ -474,8 +501,8 @@ void LuaSimBinding::registerSimAPI() {
         return managerTable;
     });
     
-    simTable.set_function("has_script_manager", [this](const std::string& entityId) -> bool {
-        simulation::MockSimController* mockSim = dynamic_cast<simulation::MockSimController*>(simInterface_);
+    simTable.set_function("has_script_manager", [](const std::string& entityId) -> bool {
+        MockSimController* mockSim = MockSimController::getInstance();
         if (!mockSim) {
             return false;
         }

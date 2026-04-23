@@ -10,7 +10,6 @@
 #include "simulation/MockSimController.h"
 
 using namespace behaviortree;
-using namespace simulation;
 
 int main() {
     std::cout << "========================================" << std::endl;
@@ -19,10 +18,10 @@ int main() {
     std::cout << std::endl;
 
     // 1. 初始化
-    MockSimController simController;
-    simController.setVerbose(false);
+    MockSimController* simController = MockSimController::createInstance();
+    simController->setVerbose(false);
 
-    BehaviorTreeExecutor executor(&simController);
+    BehaviorTreeExecutor executor;
     if (!executor.initialize()) {
         std::cerr << "Failed to initialize" << std::endl;
         return 1;
@@ -34,36 +33,41 @@ int main() {
         return 1;
     }
 
-    // 3. 设置为手动模式
-    executor.setSchedulerManualMode(true);
-    executor.startScheduler();
-
     std::cout << "Scheduler started in MANUAL mode" << std::endl;
     std::cout << std::endl;
 
-    // 4. 创建3个实体，每个有不同的tick频率
+    // 3. 创建3个实体，每个有不同的tick频率
     std::cout << "Creating entities with different tick frequencies..." << std::endl;
     std::cout << std::endl;
 
     // 实体1：高频（50ms）- 玩家
-    std::string entity1 = simController.addEntity("player", 0, 0, 0);
+    VehicleID entity1 = simController->addEntity("player", 0, 0, 0);
     auto bb1 = BT::Blackboard::create();
-    bb1->set("entity_id", entity1);
-    std::string tree1 = executor.executeAsyncWithInterval("AsyncSquarePath", bb1, 50);
+    bb1->set("vehicle_id", entity1);
+    std::string tree1 = std::to_string(entity1.vehicle);
+    
+    BT::Tree btTree1 = executor.getFactory().createTree("AsyncSquarePath", bb1);
+    BehaviorTreeScheduler::getInstance().registerEntityWithTreeAndInterval(tree1, "AsyncSquarePath", std::move(btTree1), 50, bb1);
     std::cout << "Entity 1 (Player):   50ms tick interval - Tree ID: " << tree1 << std::endl;
 
     // 实体2：中频（200ms）- 普通NPC
-    std::string entity2 = simController.addEntity("npc", 100, 0, 0);
+    VehicleID entity2 = simController->addEntity("npc", 100, 0, 0);
     auto bb2 = BT::Blackboard::create();
-    bb2->set("entity_id", entity2);
-    std::string tree2 = executor.executeAsyncWithInterval("AsyncSquarePath", bb2, 200);
+    bb2->set("vehicle_id", entity2);
+    std::string tree2 = std::to_string(entity2.vehicle);
+    
+    BT::Tree btTree2 = executor.getFactory().createTree("AsyncSquarePath", bb2);
+    BehaviorTreeScheduler::getInstance().registerEntityWithTreeAndInterval(tree2, "AsyncSquarePath", std::move(btTree2), 200, bb2);
     std::cout << "Entity 2 (NPC):     200ms tick interval - Tree ID: " << tree2 << std::endl;
 
     // 实体3：低频（500ms）- 背景NPC
-    std::string entity3 = simController.addEntity("background_npc", 200, 0, 0);
+    VehicleID entity3 = simController->addEntity("background_npc", 200, 0, 0);
     auto bb3 = BT::Blackboard::create();
-    bb3->set("entity_id", entity3);
-    std::string tree3 = executor.executeAsyncWithInterval("AsyncSquarePath", bb3, 500);
+    bb3->set("vehicle_id", entity3);
+    std::string tree3 = std::to_string(entity3.vehicle);
+    
+    BT::Tree btTree3 = executor.getFactory().createTree("AsyncSquarePath", bb3);
+    BehaviorTreeScheduler::getInstance().registerEntityWithTreeAndInterval(tree3, "AsyncSquarePath", std::move(btTree3), 500, bb3);
     std::cout << "Entity 3 (Bg NPC):  500ms tick interval - Tree ID: " << tree3 << std::endl;
 
     std::cout << std::endl;
@@ -79,8 +83,8 @@ int main() {
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime);
 
-        // 每10ms调用一次update（模拟游戏帧率100 FPS）
-        executor.updateScheduler();
+        // 每10ms调用一次tickAll（模拟游戏帧率100 FPS）
+        BehaviorTreeScheduler::getInstance().tickAll();
         globalTickCount++;
 
         // 每1000ms打印一次状态
@@ -88,13 +92,13 @@ int main() {
             int seconds = globalTickCount / 100;
             std::cout << "[Time: " << seconds << "s] ";
             
-            auto trees = executor.listAsyncTrees();
-            std::cout << "Active trees: " << trees.size();
+            auto entityIds = BehaviorTreeScheduler::getInstance().getRegisteredEntityIds();
+            std::cout << "Active trees: " << entityIds.size();
             
-            for (const auto& treeId : trees) {
-                auto status = executor.getAsyncStatus(treeId);
-                int interval = executor.getAsyncTreeTickInterval(treeId);
-                std::cout << " | " << treeId << "(" << interval << "ms):";
+            for (const auto& treeId : entityIds) {
+                auto status = BehaviorTreeScheduler::getInstance().getEntityStatus(treeId);
+                auto info = BehaviorTreeScheduler::getInstance().getEntityInfo(treeId);
+                std::cout << " | " << treeId << "(" << info->tickIntervalMs << "ms):";
                 switch (status) {
                     case BT::NodeStatus::RUNNING: std::cout << "R"; break;
                     case BT::NodeStatus::SUCCESS: std::cout << "S"; break;
@@ -106,7 +110,7 @@ int main() {
         }
 
         // 检查是否所有树都完成
-        if (executor.listAsyncTrees().empty()) {
+        if (BehaviorTreeScheduler::getInstance().getRegisteredEntityCount() == 0) {
             std::cout << std::endl;
             std::cout << "All behavior trees completed!" << std::endl;
             break;
@@ -116,7 +120,6 @@ int main() {
         if (elapsed.count() >= 10000) {
             std::cout << std::endl;
             std::cout << "Timeout! Stopping all trees..." << std::endl;
-            executor.stopScheduler();
             break;
         }
 

@@ -1,5 +1,4 @@
 #include "behaviortree/BehaviorTreeExecutor.h"
-#include "behaviortree/SimControllerPtr.h"
 #include "behaviortree/AsyncMoveToPoint.h"
 #include "behaviortree/CheckEntityExists.h"
 #include "behaviortree/SelectTargetFromList.h"
@@ -10,16 +9,10 @@
 
 namespace behaviortree {
 
-// Define global SimControlInterface pointer
-simulation::SimControlInterface* g_simController = nullptr;
-
-BehaviorTreeExecutor::BehaviorTreeExecutor(simulation::SimControlInterface* simController)
-    : simController_(simController)
-    , initialized_(false)
+BehaviorTreeExecutor::BehaviorTreeExecutor()
+    : initialized_(false)
     , treeIdCounter_(0)
 {
-    // Set global pointer
-    setSimController(simController);
 }
 
 BehaviorTreeExecutor::~BehaviorTreeExecutor() {
@@ -31,11 +24,6 @@ BehaviorTreeExecutor::~BehaviorTreeExecutor() {
         }
     }
     activeTrees_.clear();
-    
-    // Clear global pointer
-    if (g_simController == simController_) {
-        setSimController(nullptr);
-    }
 }
 
 bool BehaviorTreeExecutor::initialize() {
@@ -43,7 +31,7 @@ bool BehaviorTreeExecutor::initialize() {
         return true;
     }
     
-    if (!simController_) {
+    if (!SimControlInterface::getInstance()) {
         lastError_ = "SimController is null";
         return false;
     }

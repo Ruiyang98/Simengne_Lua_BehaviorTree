@@ -39,7 +39,7 @@ private:
     double arrivalThreshold_;
 
     // Vehicle ID
-    simulation::VehicleID vehicleId_;
+    VehicleID vehicleId_;
 
     // Check if entity has arrived at target
     bool hasArrived(double currentX, double currentY, double currentZ) const;

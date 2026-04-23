@@ -1,5 +1,5 @@
 #include "behaviortree/AsyncMoveToPoint.h"
-#include "behaviortree/SimControllerPtr.h"
+#include "simulation/SimControlInterface.h"
 #include <iostream>
 #include <cmath>
 
@@ -46,14 +46,14 @@ BT::NodeStatus AsyncMoveToPoint::onStart() {
     }
 
     try {
-        vehicleId_ = blackboard->get<simulation::VehicleID>("vehicle_id");
+        vehicleId_ = blackboard->get<VehicleID>("vehicle_id");
     } catch (const std::exception& e) {
         std::cerr << "[AsyncMoveToPoint] Failed to get vehicle_id from blackboard: " << e.what() << std::endl;
         return BT::NodeStatus::FAILURE;
     }
 
     // Get simulation controller
-    simulation::SimControlInterface* simController = getSimController();
+    SimControlInterface* simController = SimControlInterface::getInstance();
     if (!simController) {
         std::cerr << "[AsyncMoveToPoint] SimController not available" << std::endl;
         return BT::NodeStatus::FAILURE;
@@ -95,7 +95,7 @@ BT::NodeStatus AsyncMoveToPoint::onStart() {
 }
 
 BT::NodeStatus AsyncMoveToPoint::onRunning() {
-    simulation::SimControlInterface* simController = getSimController();
+    SimControlInterface* simController = SimControlInterface::getInstance();
     if (!simController) {
         std::cerr << "[AsyncMoveToPoint] SimController not available" << std::endl;
         return BT::NodeStatus::FAILURE;
@@ -122,7 +122,7 @@ void AsyncMoveToPoint::onHalted() {
     std::cout << "[AsyncMoveToPoint] Movement halted for entity vehicle=" << vehicleId_.vehicle << std::endl;
 
     // Stop movement
-    simulation::SimControlInterface* simController = getSimController();
+    SimControlInterface* simController = SimControlInterface::getInstance();
     if (simController) {
         simController->setEntityMoveDirection(vehicleId_, 0, 0, 0);
     }

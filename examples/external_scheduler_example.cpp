@@ -11,7 +11,6 @@
 #include "simulation/MockSimController.h"
 
 using namespace behaviortree;
-using namespace simulation;
 
 // Helper function to convert status to string
 const char* statusToString(BT::NodeStatus status) {
@@ -31,12 +30,12 @@ void simpleExternalSchedulerExample() {
     std::cout << "========================================" << std::endl;
     std::cout << std::endl;
 
-    // 1. Initialize simulation controller
-    MockSimController simController;
-    simController.setVerbose(true);
+    // 1. Initialize simulation controller singleton
+    MockSimController* simController = MockSimController::createInstance();
+    simController->setVerbose(true);
 
     // 2. Create behavior tree executor
-    BehaviorTreeExecutor executor(&simController);
+    BehaviorTreeExecutor executor;
     if (!executor.initialize()) {
         std::cerr << "Failed to initialize BT executor" << std::endl;
         return;
@@ -49,7 +48,7 @@ void simpleExternalSchedulerExample() {
     }
 
     // 4. Create test entity
-    VehicleID entityId = simController.addEntity("npc", 0, 0, 0);
+    VehicleID entityId = simController->addEntity("npc", 0, 0, 0);
     std::cout << "Created entity: vehicle=" << entityId.vehicle << std::endl;
 
     // 5. Get scheduler instance
@@ -121,10 +120,10 @@ void multiEntitySchedulerExample() {
     std::cout << std::endl;
 
     // 1. Initialize
-    MockSimController simController;
-    simController.setVerbose(false);  // Reduce output
+    MockSimController* simController = MockSimController::getInstance();
+    simController->setVerbose(false);  // Reduce output
 
-    BehaviorTreeExecutor executor(&simController);
+    BehaviorTreeExecutor executor;
     executor.initialize();
     executor.loadFromFile("bt_xml/async_square_path.xml");
 
@@ -134,7 +133,7 @@ void multiEntitySchedulerExample() {
     std::vector<VehicleID> entityIds;
     std::vector<std::string> entityKeys;
     for (int i = 0; i < 3; ++i) {
-        VehicleID entityId = simController.addEntity("npc_" + std::to_string(i), i * 5, 0, 0);
+        VehicleID entityId = simController->addEntity("npc_" + std::to_string(i), i * 5, 0, 0);
         entityIds.push_back(entityId);
         std::string entityKey = std::to_string(entityId.vehicle);
         entityKeys.push_back(entityKey);
@@ -204,12 +203,12 @@ public:
     GameEngineSimulator() : running_(false) {}
 
     bool initialize() {
-        // Create simulation controller
-        simController_ = std::make_unique<MockSimController>();
+        // Get simulation controller singleton
+        simController_ = MockSimController::getInstance();
         simController_->setVerbose(false);
 
         // Create behavior tree executor
-        btExecutor_ = std::make_unique<BehaviorTreeExecutor>(simController_.get());
+        btExecutor_.reset(new BehaviorTreeExecutor());
         if (!btExecutor_->initialize()) {
             std::cerr << "Failed to initialize BT executor" << std::endl;
             return false;
@@ -314,7 +313,7 @@ private:
         std::cout << std::endl;
     }
 
-    std::unique_ptr<MockSimController> simController_;
+    MockSimController* simController_;
     std::unique_ptr<BehaviorTreeExecutor> btExecutor_;
     std::atomic<bool> running_;
 };

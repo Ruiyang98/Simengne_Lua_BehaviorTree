@@ -14,8 +14,7 @@ public:
     TacticalScript(const std::string& name, 
                    const std::string& scriptCode,
                    sol::state& luaState, 
-                   const std::string& entityId,
-                   simulation::SimControlInterface* sim);
+                   const std::string& entityId);
     
     ~TacticalScript() override;
     
@@ -25,7 +24,6 @@ public:
 private:
     sol::state& luaState_;
     std::string entityId_;
-    simulation::SimControlInterface* simInterface_;
     sol::function executeFunc_;  // Lua execute function
     
     // Initialize Lua script

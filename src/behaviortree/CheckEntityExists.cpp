@@ -1,5 +1,5 @@
 #include "behaviortree/CheckEntityExists.h"
-#include "behaviortree/SimControllerPtr.h"
+#include "simulation/SimControlInterface.h"
 #include <iostream>
 
 namespace behaviortree {
@@ -11,13 +11,13 @@ CheckEntityExists::CheckEntityExists(const std::string& name, const BT::NodeConf
 
 BT::PortsList CheckEntityExists::providedPorts() {
     return {
-        BT::InputPort<simulation::VehicleID>("vehicle_id", "Vehicle ID to check")
+        BT::InputPort<VehicleID>("vehicle_id", "Vehicle ID to check")
     };
 }
 
 BT::NodeStatus CheckEntityExists::tick() {
     // Get input parameters
-    BT::Optional<simulation::VehicleID> vehicle_id = getInput<simulation::VehicleID>("vehicle_id");
+    BT::Optional<VehicleID> vehicle_id = getInput<VehicleID>("vehicle_id");
 
     // Check required parameters
     if (!vehicle_id) {
@@ -26,7 +26,7 @@ BT::NodeStatus CheckEntityExists::tick() {
     }
 
     // Get simulation controller
-    simulation::SimControlInterface* sim = getSimController();
+    SimControlInterface* sim = SimControlInterface::getInstance();
     if (!sim) {
         std::cerr << "[CheckEntityExists] SimController not available" << std::endl;
         return BT::NodeStatus::FAILURE;
