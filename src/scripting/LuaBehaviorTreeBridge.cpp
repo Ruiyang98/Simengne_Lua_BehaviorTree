@@ -348,7 +348,7 @@ void LuaBehaviorTreeBridge::registerLuaAPI() {
         return setTickCallback(entityId, callback);
     });
 
-    // ==================== Lazy Loading API ====================
+    // ==================== Preload API ====================
 
     // Load global nodes registry script
     btTable.set_function("load_registry", [this](sol::optional<std::string> registryPath) -> bool {
@@ -360,14 +360,14 @@ void LuaBehaviorTreeBridge::registerLuaAPI() {
         return scanBehaviorTreeDefinitions(directory);
     });
 
-    // Check if tree definition is available
-    btTable.set_function("is_tree_available", [this](const std::string& treeName) -> bool {
-        return isTreeDefinitionAvailable(treeName);
+    // Preload all scanned behavior trees
+    btTable.set_function("preload_all_trees", [this]() -> bool {
+        return preloadAllBehaviorTrees();
     });
 
-    // Preload specific tree (optional)
-    btTable.set_function("preload_tree", [this](const std::string& treeName) -> bool {
-        return loadTreeDefinition(treeName);
+    // Scan and preload all XML files from directory
+    btTable.set_function("preload_trees_from_dir", [this](const std::string& directory) -> bool {
+        return preloadBehaviorTreesFromDirectory(directory);
     });
 }
 
@@ -409,12 +409,14 @@ std::string LuaBehaviorTreeBridge::executeBehaviorTree(const std::string& treeNa
         return "";
     }
 
-    // Lazy load tree definition if not already loaded
-    if (!loadTreeDefinition(treeName)) {
-        // Failed to load tree definition
+    // Preload mode: check if tree definition is already loaded
+    if (loadedTreeDefinitions_.count(treeName) == 0) {
+        lastError_ = "Tree definition not preloaded: " + treeName +
+                     ". Call bt.preload_all_trees() or bt.preload_trees_from_dir() first.";
+        std::cerr << "[LuaBehaviorTreeBridge] " << lastError_ << std::endl;
         return "";
     }
-    
+
     try {
         // Create blackboard
         auto blackboard = BT::Blackboard::create();
@@ -882,60 +884,51 @@ bool LuaBehaviorTreeBridge::scanBehaviorTreeDefinitions(const std::string& direc
     }
 }
 
-bool LuaBehaviorTreeBridge::isTreeDefinitionAvailable(const std::string& treeName) {
-    // Already loaded
-    if (loadedTreeDefinitions_.count(treeName) > 0) {
-        return true;
-    }
-    // Can be loaded
-    return treeDefinitionPaths_.count(treeName) > 0;
-}
-
-bool LuaBehaviorTreeBridge::loadTreeDefinition(const std::string& treeName) {
-    // Already loaded, return immediately
-    if (loadedTreeDefinitions_.count(treeName) > 0) {
+bool LuaBehaviorTreeBridge::preloadAllBehaviorTrees() {
+    if (treeDefinitionPaths_.empty()) {
+        std::cout << "[LuaBehaviorTreeBridge] No tree definitions to preload" << std::endl;
         return true;
     }
 
-    // Try to load the tree definition
-    return tryLoadTreeDefinition(treeName);
-}
+    int successCount = 0;
+    int totalCount = treeDefinitionPaths_.size();
 
-bool LuaBehaviorTreeBridge::tryLoadTreeDefinition(const std::string& treeName) {
-    // Look up file path from mapping
-    auto it = treeDefinitionPaths_.find(treeName);
-    if (it != treeDefinitionPaths_.end()) {
-        // Found mapping, load the file
-        if (loadBehaviorTreeFromFile(it->second)) {
-            loadedTreeDefinitions_.insert(treeName);
-            std::cout << "[LuaBehaviorTreeBridge] Lazy loaded: " << treeName
-                      << " from " << it->second << std::endl;
-            return true;
+    std::cout << "[LuaBehaviorTreeBridge] Preloading " << totalCount
+              << " behavior tree definitions..." << std::endl;
+
+    for (const auto& pair : treeDefinitionPaths_) {
+        const std::string& treeName = pair.first;
+        const std::string& filePath = pair.second;
+
+        if (loadedTreeDefinitions_.count(treeName) > 0) {
+            successCount++;
+            continue;
         }
+
+        if (loadBehaviorTreeFromFile(filePath)) {
+            loadedTreeDefinitions_.insert(treeName);
+            successCount++;
+            std::cout << "  [OK] Preloaded: " << treeName << std::endl;
+        } else {
+            std::cerr << "  [FAIL] Failed to preload: " << treeName
+                      << " (" << lastError_ << ")" << std::endl;
+        }
+    }
+
+    std::cout << "[LuaBehaviorTreeBridge] Preloaded " << successCount
+              << "/" << totalCount << " behavior trees" << std::endl;
+
+    return successCount == totalCount;
+}
+
+bool LuaBehaviorTreeBridge::preloadBehaviorTreesFromDirectory(const std::string& directory) {
+    // First scan the directory
+    if (!scanBehaviorTreeDefinitions(directory)) {
         return false;
     }
 
-    // No mapping found, try default path
-    std::string defaultPath = "bt_xml/" + treeName + ".xml";
-#ifdef _WIN32
-    DWORD attribs = GetFileAttributesA(defaultPath.c_str());
-    bool exists = (attribs != INVALID_FILE_ATTRIBUTES && !(attribs & FILE_ATTRIBUTE_DIRECTORY));
-#else
-    struct stat statbuf;
-    bool exists = (stat(defaultPath.c_str(), &statbuf) == 0 && S_ISREG(statbuf.st_mode));
-#endif
-    if (exists) {
-        if (loadBehaviorTreeFromFile(defaultPath)) {
-            loadedTreeDefinitions_.insert(treeName);
-            treeDefinitionPaths_[treeName] = defaultPath;
-            std::cout << "[LuaBehaviorTreeBridge] Lazy loaded: " << treeName
-                      << " from " << defaultPath << std::endl;
-            return true;
-        }
-    }
-
-    lastError_ = "Tree definition not found: " + treeName;
-    return false;
+    // Then preload all
+    return preloadAllBehaviorTrees();
 }
 
 } // namespace scripting

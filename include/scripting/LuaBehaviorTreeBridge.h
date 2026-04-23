@@ -153,7 +153,7 @@ public:
     // Set callback for each tick
     bool setTickCallback(const std::string& entityId, sol::protected_function callback);
 
-    // ==================== Lazy Loading API ====================
+    // ==================== Preload API ====================
 
     // Load global nodes registry script
     bool loadNodesRegistry(const std::string& registryPath = "scripts/bt_nodes_registry.lua");
@@ -161,11 +161,11 @@ public:
     // Scan directory to build tree name -> file path mapping (without loading)
     bool scanBehaviorTreeDefinitions(const std::string& directory);
 
-    // Check if tree definition is available (loaded or loadable)
-    bool isTreeDefinitionAvailable(const std::string& treeName);
+    // Preload all scanned behavior tree definitions
+    bool preloadAllBehaviorTrees();
 
-    // Lazy load tree definition on demand
-    bool loadTreeDefinition(const std::string& treeName);
+    // Scan and preload all XML files from directory (one-step operation)
+    bool preloadBehaviorTreesFromDirectory(const std::string& directory);
 
 private:
     sol::state* luaState_;
