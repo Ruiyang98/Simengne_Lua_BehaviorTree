@@ -19,9 +19,8 @@ struct TreeExecutionInfo {
     BT::Tree tree;
     BT::NodeStatus lastStatus;
     bool isRunning;
-    bool isAsync;
 
-    TreeExecutionInfo() : lastStatus(BT::NodeStatus::IDLE), isRunning(false), isAsync(false) {}
+    TreeExecutionInfo() : lastStatus(BT::NodeStatus::IDLE), isRunning(false) {}
 };
 
 // Behavior tree executor: manages loading and execution of behavior trees
@@ -60,37 +59,6 @@ public:
     
     // Get factory (for advanced configuration)
     BT::BehaviorTreeFactory& getFactory() { return factory_; }
-
-    // ==================== Async Execution with Global Scheduler ====================
-
-    // Execute behavior tree asynchronously (using global scheduler)
-    // entityId: entity ID for registration and management in scheduler
-    // treeName: behavior tree name
-    // blackboard: blackboard data
-    // tickIntervalMs: this parameter is reserved but ignored (scheduler uses fixed 500ms)
-    // Returns true on success, false on failure
-    bool executeAsync(const std::string& entityId,
-                      const std::string& treeName = "MainTree",
-                      BT::Blackboard::Ptr blackboard = nullptr,
-                      int tickIntervalMs = 0);
-
-    // Stop an async behavior tree for entity
-    bool stopAsync(const std::string& entityId);
-
-    // Halt an async behavior tree for entity (pause ticking)
-    bool haltAsync(const std::string& entityId);
-
-    // Resume a halted async behavior tree for entity
-    bool resumeAsync(const std::string& entityId);
-
-    // Get async tree status for entity
-    BT::NodeStatus getAsyncStatus(const std::string& entityId) const;
-
-    // Check if async entity exists in scheduler
-    bool hasAsyncEntity(const std::string& entityId) const;
-
-    // Get all registered async entity IDs
-    std::vector<std::string> getAsyncEntityIds() const;
 
 private:
     BT::BehaviorTreeFactory factory_;

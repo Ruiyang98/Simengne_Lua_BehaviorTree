@@ -2,7 +2,6 @@
 #include "behaviortree/AsyncMoveToPoint.h"
 #include "behaviortree/CheckEntityExists.h"
 #include "behaviortree/SelectTargetFromList.h"
-#include "behaviortree/BehaviorTreeScheduler.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -184,120 +183,6 @@ std::string BehaviorTreeExecutor::generateTreeId() {
     std::stringstream ss;
     ss << "bt_" << ++treeIdCounter_;
     return ss.str();
-}
-
-// ==================== Async Execution with Global Scheduler ====================
-
-bool BehaviorTreeExecutor::executeAsync(const std::string& entityId,
-                                        const std::string& treeName,
-                                        BT::Blackboard::Ptr blackboard,
-                                        int tickIntervalMs) {
-    if (!initialized_) {
-        lastError_ = "Executor not initialized";
-        return false;
-    }
-
-    if (entityId.empty()) {
-        lastError_ = "Entity ID cannot be empty";
-        return false;
-    }
-
-    try {
-        // If no blackboard provided, create a default one
-        if (!blackboard) {
-            blackboard = BT::Blackboard::create();
-        }
-
-        // Create behavior tree
-        auto tree = factory_.createTree(treeName, blackboard);
-
-        // Get global scheduler instance
-        BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
-
-        // Register entity with tree in the global scheduler
-        // tickIntervalMs is ignored, scheduler uses fixed 500ms interval
-        bool result = scheduler.registerEntityWithTree(entityId, treeName, std::move(tree), blackboard);
-
-        if (result) {
-            // Store in active trees for tracking
-            auto info = std::make_shared<TreeExecutionInfo>();
-            info->treeId = entityId;
-            info->treeName = treeName;
-            info->lastStatus = BT::NodeStatus::RUNNING;
-            info->isRunning = true;
-            info->isAsync = true;
-
-            {
-                std::lock_guard<std::mutex> lock(treesMutex_);
-                activeTrees_[entityId] = info;
-            }
-
-            std::cout << "[BehaviorTreeExecutor] Started async behavior tree for entity: " << entityId
-                      << " (tree: " << treeName << ", interval: 500ms [fixed])" << std::endl;
-        }
-
-        return result;
-    } catch (const std::exception& e) {
-        lastError_ = std::string("Failed to execute async behavior tree: ") + e.what();
-        std::cerr << "[BehaviorTreeExecutor] Error: " << lastError_ << std::endl;
-        return false;
-    }
-}
-
-bool BehaviorTreeExecutor::stopAsync(const std::string& entityId) {
-    // Get global scheduler instance
-    BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
-
-    // Unregister entity from scheduler
-    bool result = scheduler.unregisterEntity(entityId);
-
-    if (result) {
-        // Remove from active trees
-        std::lock_guard<std::mutex> lock(treesMutex_);
-        activeTrees_.erase(entityId);
-    }
-
-    return result;
-}
-
-bool BehaviorTreeExecutor::haltAsync(const std::string& entityId) {
-    // Get global scheduler instance
-    BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
-
-    // Pause entity in scheduler
-    return scheduler.pauseEntity(entityId);
-}
-
-bool BehaviorTreeExecutor::resumeAsync(const std::string& entityId) {
-    // Get global scheduler instance
-    BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
-
-    // Resume entity in scheduler
-    return scheduler.resumeEntity(entityId);
-}
-
-BT::NodeStatus BehaviorTreeExecutor::getAsyncStatus(const std::string& entityId) const {
-    // Get global scheduler instance
-    BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
-
-    // Get entity status from scheduler
-    return scheduler.getEntityStatus(entityId);
-}
-
-bool BehaviorTreeExecutor::hasAsyncEntity(const std::string& entityId) const {
-    // Get global scheduler instance
-    BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
-
-    // Check if entity exists in scheduler
-    return scheduler.hasEntity(entityId);
-}
-
-std::vector<std::string> BehaviorTreeExecutor::getAsyncEntityIds() const {
-    // Get global scheduler instance
-    BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
-
-    // Get all registered entity IDs from scheduler
-    return scheduler.getRegisteredEntityIds();
 }
 
 } // namespace behaviortree

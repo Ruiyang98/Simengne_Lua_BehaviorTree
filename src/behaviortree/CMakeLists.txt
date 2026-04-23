@@ -5,7 +5,6 @@ set(BT_NODES_SOURCES
     CheckEntityExists.cpp
     SelectTargetFromList.cpp
     BehaviorTreeExecutor.cpp
-    BehaviorTreeScheduler.cpp
 )
 
 add_library(bt_nodes STATIC ${BT_NODES_SOURCES})

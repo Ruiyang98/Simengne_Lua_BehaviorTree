@@ -91,29 +91,6 @@ public:
     // Preload behavior trees from directory
     bool preloadBehaviorTreesFromDirectory(const std::string& directory);
 
-    // ==================== Async Execution API ====================
-
-    // Execute behavior tree asynchronously (returns immediately, runs in background)
-    // entityId is now required (not optional)
-    bool executeAsync(const std::string& treeName,
-                      const std::string& entityId,
-                      sol::optional<sol::table> params);
-
-    // Stop an async behavior tree by entityId
-    bool stopAsync(const std::string& entityId);
-
-    // Get async behavior tree status by entityId
-    std::string getAsyncStatus(const std::string& entityId);
-
-    // Get all registered async entity IDs
-    sol::table getAsyncEntities();
-
-    // Set callback for when tree completes
-    bool setCompleteCallback(const std::string& entityId, sol::protected_function callback);
-
-    // Set callback for each tick
-    bool setTickCallback(const std::string& entityId, sol::protected_function callback);
-
 private:
     sol::state* luaState_;
     BT::BehaviorTreeFactory* factory_;
@@ -122,14 +99,6 @@ private:
     std::string lastError_;
     int treeIdCounter_;
     bool initialized_;
-
-    // Async execution support
-    struct AsyncCallbackInfo {
-        sol::protected_function onComplete;
-        sol::protected_function onTick;
-    };
-    std::unordered_map<std::string, AsyncCallbackInfo> asyncCallbacks_;
-    std::mutex callbacksMutex_;
 
     // Generate unique tree ID
     std::string generateTreeId();

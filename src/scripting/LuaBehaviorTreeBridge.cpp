@@ -1,5 +1,4 @@
 #include "scripting/LuaBehaviorTreeBridge.h"
-#include "behaviortree/BehaviorTreeScheduler.h"
 #include <iostream>
 #include <sstream>
 #include <chrono>
@@ -155,42 +154,8 @@ void LuaBehaviorTreeBridge::registerLuaAPI() {
         return getLastError();
     });
 
-    // ==================== Async Execution API ====================
-
-    // Execute behavior tree asynchronously
-    // entityId is now required (not optional)
-    btTable.set_function("execute_async", [this](const std::string& treeName,
-                                                  const std::string& entityId,
-                                                  sol::optional<sol::table> params) -> bool {
-        return executeAsync(treeName, entityId, params);
-    });
-
-    // Stop async behavior tree by entityId
-    btTable.set_function("stop_async", [this](const std::string& entityId) -> bool {
-        return stopAsync(entityId);
-    });
-
-    // Get async behavior tree status by entityId
-    btTable.set_function("get_async_status", [this](const std::string& entityId) -> std::string {
-        return getAsyncStatus(entityId);
-    });
-
-    // Get all registered async entity IDs
-    btTable.set_function("get_async_entities", [this]() -> sol::table {
-        return getAsyncEntities();
-    });
-
-    // Set complete callback
-    btTable.set_function("set_complete_callback", [this](const std::string& entityId,
-                                                          sol::protected_function callback) -> bool {
-        return setCompleteCallback(entityId, callback);
-    });
-
-    // Set tick callback
-    btTable.set_function("set_tick_callback", [this](const std::string& entityId,
-                                                      sol::protected_function callback) -> bool {
-        return setTickCallback(entityId, callback);
-    });
+    // Note: Async execution APIs are removed
+    // Behavior trees are now executed through BTScript in EntityScriptManager
 }
 
 bool LuaBehaviorTreeBridge::loadBehaviorTreeFromFile(const std::string& xmlFile) {
@@ -252,7 +217,7 @@ std::string LuaBehaviorTreeBridge::executeBehaviorTree(const std::string& treeNa
             for (auto& pair : paramsTable) {
                 std::string key = pair.first.as<std::string>();
                 sol::object value = pair.second;
-                
+
                 if (value.is<std::string>()) {
                     blackboard->set(key, value.as<std::string>());
                 } else if (value.is<bool>()) {
@@ -269,41 +234,32 @@ std::string LuaBehaviorTreeBridge::executeBehaviorTree(const std::string& treeNa
                 }
             }
         }
-        
+
         // Create tree
         auto tree = factory_->createTree(treeName, blackboard);
+
+        // Execute tree synchronously
+        BT::NodeStatus status = tree.tickRoot();
         
-        // Generate tree ID
-        std::string treeId = generateTreeId();
-        
-        // Store tree info
-        auto info = std::make_shared<TreeExecutionInfo>();
-        info->treeId = treeId;
-        info->treeName = treeName;
-        info->entityId = entityId;
-        info->tree = std::move(tree);
-        info->isRunning = true;
-        info->startTime = std::chrono::steady_clock::now();
-        
-        {
-            std::lock_guard<std::mutex> lock(treesMutex_);
-            activeTrees_[treeId] = info;
+        // Return status
+        switch (status) {
+            case BT::NodeStatus::SUCCESS: return "SUCCESS";
+            case BT::NodeStatus::FAILURE: return "FAILURE";
+            case BT::NodeStatus::RUNNING: return "RUNNING";
+            case BT::NodeStatus::IDLE: return "IDLE";
+            default: return "UNKNOWN";
         }
-        
-        // Execute tree (synchronously for now)
-        info->lastStatus = info->tree.tickRoot();
-        info->isRunning = (info->lastStatus == BT::NodeStatus::RUNNING);
-        
-        return treeId;
-        
+
     } catch (const std::exception& e) {
         lastError_ = std::string("Failed to execute behavior tree: ") + e.what();
+        std::cerr << "[LuaBehaviorTreeBridge] " << lastError_ << std::endl;
         return "";
     }
 }
 
 std::string LuaBehaviorTreeBridge::getTreeStatus(const std::string& treeId) {
     std::lock_guard<std::mutex> lock(treesMutex_);
+    
     auto it = activeTrees_.find(treeId);
     if (it == activeTrees_.end()) {
         return "NOT_FOUND";
@@ -320,23 +276,27 @@ std::string LuaBehaviorTreeBridge::getTreeStatus(const std::string& treeId) {
 
 bool LuaBehaviorTreeBridge::stopBehaviorTree(const std::string& treeId) {
     std::lock_guard<std::mutex> lock(treesMutex_);
+    
     auto it = activeTrees_.find(treeId);
     if (it == activeTrees_.end()) {
         lastError_ = "Tree not found: " + treeId;
         return false;
     }
     
-    it->second->tree.haltTree();
-    it->second->isRunning = false;
-    it->second->lastStatus = BT::NodeStatus::IDLE;
+    if (it->second->isRunning) {
+        it->second->tree.haltTree();
+        it->second->isRunning = false;
+    }
     
+    activeTrees_.erase(it);
     return true;
 }
 
-bool LuaBehaviorTreeBridge::setBlackboardValue(const std::string& treeId,
-                                                const std::string& key,
+bool LuaBehaviorTreeBridge::setBlackboardValue(const std::string& treeId, 
+                                                const std::string& key, 
                                                 sol::object value) {
     std::lock_guard<std::mutex> lock(treesMutex_);
+    
     auto it = activeTrees_.find(treeId);
     if (it == activeTrees_.end()) {
         lastError_ = "Tree not found: " + treeId;
@@ -346,21 +306,20 @@ bool LuaBehaviorTreeBridge::setBlackboardValue(const std::string& treeId,
     try {
         auto blackboard = it->second->tree.rootBlackboard();
         if (!blackboard) {
-            lastError_ = "Blackboard is null";
+            lastError_ = "Tree has no blackboard";
             return false;
         }
         
         if (value.is<std::string>()) {
             blackboard->set(key, value.as<std::string>());
-        } else if (value.is<double>()) {
-            blackboard->set(key, value.as<double>());
         } else if (value.is<bool>()) {
             blackboard->set(key, value.as<bool>());
         } else if (value.is<int>()) {
             blackboard->set(key, value.as<int>());
+        } else if (value.is<double>()) {
+            blackboard->set(key, value.as<double>());
         } else {
-            lastError_ = "Unsupported value type";
-            return false;
+            blackboard->set(key, luaObjectToString(value));
         }
         
         return true;
@@ -370,82 +329,78 @@ bool LuaBehaviorTreeBridge::setBlackboardValue(const std::string& treeId,
     }
 }
 
-sol::object LuaBehaviorTreeBridge::getBlackboardValue(const std::string& treeId,
+sol::object LuaBehaviorTreeBridge::getBlackboardValue(const std::string& treeId, 
                                                        const std::string& key) {
     std::lock_guard<std::mutex> lock(treesMutex_);
+    
     auto it = activeTrees_.find(treeId);
     if (it == activeTrees_.end()) {
-        lastError_ = "Tree not found: " + treeId;
         return sol::nil;
     }
     
     try {
         auto blackboard = it->second->tree.rootBlackboard();
         if (!blackboard) {
-            lastError_ = "Blackboard is null";
             return sol::nil;
         }
         
-        if (!blackboard->getAny(key)) {
+        auto anyVal = blackboard->getAny(key);
+        if (!anyVal) {
             return sol::nil;
         }
         
-        // Try to get as different types
-        try {
-            return sol::make_object(*luaState_, blackboard->get<std::string>(key));
-        } catch (...) {}
-        
-        try {
-            return sol::make_object(*luaState_, blackboard->get<double>(key));
-        } catch (...) {}
-        
-        try {
-            return sol::make_object(*luaState_, blackboard->get<bool>(key));
-        } catch (...) {}
-        
-        try {
-            return sol::make_object(*luaState_, blackboard->get<int>(key));
-        } catch (...) {}
-        
-        return sol::nil;
-        
+        return blackboardEntryToLuaObject(*anyVal);
     } catch (const std::exception& e) {
-        lastError_ = std::string("Failed to get blackboard value: ") + e.what();
         return sol::nil;
     }
 }
 
 bool LuaBehaviorTreeBridge::registerLuaAction(const std::string& name, sol::protected_function func) {
     if (!func.valid()) {
-        lastError_ = "Invalid Lua function";
+        lastError_ = "Invalid function";
         return false;
     }
     
-    LuaActionNode::setLuaFunction(name, func);
-    return true;
+    try {
+        LuaActionNode::setLuaFunction(name, func);
+        return true;
+    } catch (const std::exception& e) {
+        lastError_ = std::string("Failed to register action: ") + e.what();
+        return false;
+    }
 }
 
 bool LuaBehaviorTreeBridge::registerLuaCondition(const std::string& name, sol::protected_function func) {
     if (!func.valid()) {
-        lastError_ = "Invalid Lua function";
+        lastError_ = "Invalid function";
         return false;
     }
     
-    LuaConditionNode::setLuaFunction(name, func);
-    return true;
+    try {
+        LuaConditionNode::setLuaFunction(name, func);
+        return true;
+    } catch (const std::exception& e) {
+        lastError_ = std::string("Failed to register condition: ") + e.what();
+        return false;
+    }
 }
 
 bool LuaBehaviorTreeBridge::registerLuaStatefulAction(const std::string& name,
-                                                      sol::protected_function onStart,
-                                                      sol::protected_function onRunning,
-                                                      sol::protected_function onHalted) {
-    if (!onStart.valid() || !onRunning.valid()) {
-        lastError_ = "Invalid Lua function (onStart and onRunning are required)";
+                                                       sol::protected_function onStart,
+                                                       sol::protected_function onRunning,
+                                                       sol::protected_function onHalted) {
+    if (!onStart.valid() || !onRunning.valid() || !onHalted.valid()) {
+        lastError_ = "Invalid function(s)";
         return false;
     }
     
-    LuaStatefulActionNode::setLuaFunctions(name, onStart, onRunning, onHalted);
-    return true;
+    try {
+        LuaStatefulActionNode::setLuaFunctions(name, onStart, onRunning, onHalted);
+        return true;
+    } catch (const std::exception& e) {
+        lastError_ = std::string("Failed to register stateful action: ") + e.what();
+        return false;
+    }
 }
 
 bool LuaBehaviorTreeBridge::hasTree(const std::string& treeId) {
@@ -454,322 +409,132 @@ bool LuaBehaviorTreeBridge::hasTree(const std::string& treeId) {
 }
 
 std::string LuaBehaviorTreeBridge::generateTreeId() {
-    std::stringstream ss;
-    ss << "bt_" << ++treeIdCounter_;
-    return ss.str();
+    return "bt_" + std::to_string(++treeIdCounter_);
 }
 
-// ==================== Async Execution API ====================
-
-bool LuaBehaviorTreeBridge::executeAsync(const std::string& treeName,
-                                          const std::string& entityId,
-                                          sol::optional<sol::table> params) {
-    if (!factory_) {
-        lastError_ = "BT factory is null";
-        return false;
+std::string LuaBehaviorTreeBridge::luaObjectToString(sol::object obj) {
+    if (obj.is<std::string>()) {
+        return obj.as<std::string>();
+    } else if (obj.is<bool>()) {
+        return obj.as<bool>() ? "true" : "false";
+    } else if (obj.is<int>()) {
+        return std::to_string(obj.as<int>());
+    } else if (obj.is<double>()) {
+        return std::to_string(obj.as<double>());
     }
+    return "";
+}
 
+sol::object LuaBehaviorTreeBridge::blackboardEntryToLuaObject(const BT::Any& entry) {
     try {
-        // Create blackboard
-        auto blackboard = BT::Blackboard::create();
-
-        // Set entity ID
-        blackboard->set("entity_id", entityId);
-
-        // Set additional parameters if provided
-        if (params) {
-            sol::table paramsTable = params.value();
-            for (auto& pair : paramsTable) {
-                std::string key = pair.first.as<std::string>();
-                sol::object value = pair.second;
-
-                if (value.is<std::string>()) {
-                    blackboard->set(key, value.as<std::string>());
-                } else if (value.is<bool>()) {
-                    blackboard->set(key, value.as<bool>());
-                } else if (value.is<int>()) {
-                    blackboard->set(key, value.as<int>());
-                } else if (value.is<double>()) {
-                    double d = value.as<double>();
-                    if (d == static_cast<int>(d)) {
-                        blackboard->set(key, static_cast<int>(d));
-                    } else {
-                        blackboard->set(key, d);
-                    }
-                }
-            }
+        if (entry.type() == typeid(std::string)) {
+            return sol::make_object(*luaState_, entry.cast<std::string>());
+        } else if (entry.type() == typeid(bool)) {
+            return sol::make_object(*luaState_, entry.cast<bool>());
+        } else if (entry.type() == typeid(int)) {
+            return sol::make_object(*luaState_, entry.cast<int>());
+        } else if (entry.type() == typeid(double)) {
+            return sol::make_object(*luaState_, entry.cast<double>());
         }
-
-        // Create tree
-        auto tree = factory_->createTree(treeName, blackboard);
-
-        // Get global scheduler instance and register entity
-        auto& scheduler = behaviortree::BehaviorTreeScheduler::getInstance();
-        bool success = scheduler.registerEntityWithTree(entityId, treeName, std::move(tree), blackboard);
-
-        return success;
-
-    } catch (const std::exception& e) {
-        lastError_ = std::string("Failed to execute async behavior tree: ") + e.what();
-        return false;
+    } catch (...) {
+        // Conversion failed
     }
+    return sol::nil;
 }
-
-bool LuaBehaviorTreeBridge::stopAsync(const std::string& entityId) {
-    auto& scheduler = behaviortree::BehaviorTreeScheduler::getInstance();
-    scheduler.unregisterEntity(entityId);
-    return true;
-}
-
-std::string LuaBehaviorTreeBridge::getAsyncStatus(const std::string& entityId) {
-    auto& scheduler = behaviortree::BehaviorTreeScheduler::getInstance();
-    BT::NodeStatus status = scheduler.getEntityStatus(entityId);
-    
-    switch (status) {
-        case BT::NodeStatus::SUCCESS: return "SUCCESS";
-        case BT::NodeStatus::FAILURE: return "FAILURE";
-        case BT::NodeStatus::RUNNING: return "RUNNING";
-        case BT::NodeStatus::IDLE: return "IDLE";
-        default: return "UNKNOWN";
-    }
-}
-
-sol::table LuaBehaviorTreeBridge::getAsyncEntities() {
-    sol::table result = luaState_->create_table();
-
-    auto& scheduler = behaviortree::BehaviorTreeScheduler::getInstance();
-    std::vector<std::string> entityIds = scheduler.getRegisteredEntityIds();
-
-    int index = 1;
-    for (const auto& entityId : entityIds) {
-        result[index++] = entityId;
-    }
-
-    return result;
-}
-
-bool LuaBehaviorTreeBridge::setCompleteCallback(const std::string& entityId, sol::protected_function callback) {
-    if (!callback.valid()) {
-        lastError_ = "Invalid callback function";
-        return false;
-    }
-
-    std::lock_guard<std::mutex> lock(callbacksMutex_);
-    asyncCallbacks_[entityId].onComplete = callback;
-    return true;
-}
-
-bool LuaBehaviorTreeBridge::setTickCallback(const std::string& entityId, sol::protected_function callback) {
-    if (!callback.valid()) {
-        lastError_ = "Invalid callback function";
-        return false;
-    }
-
-    std::lock_guard<std::mutex> lock(callbacksMutex_);
-    asyncCallbacks_[entityId].onTick = callback;
-    return true;
-}
-
-// ==================== Preload Implementation ====================
 
 bool LuaBehaviorTreeBridge::loadNodesRegistry(const std::string& registryPath) {
     try {
         // Load and execute the registry script
         sol::load_result script = luaState_->load_file(registryPath);
         if (!script.valid()) {
-            sol::error err = script;
-            lastError_ = std::string("Failed to load registry script: ") + err.what();
-            return false;
+            // Registry file doesn't exist, which is OK
+            return true;
         }
-
-        sol::protected_function_result result = script();
+        
+        auto result = script();
         if (!result.valid()) {
             sol::error err = result;
-            lastError_ = std::string("Failed to execute registry script: ") + err.what();
+            std::cerr << "[LuaBehaviorTreeBridge] Error loading nodes registry: " << err.what() << std::endl;
             return false;
         }
-
-        std::cout << "[LuaBehaviorTreeBridge] Loaded nodes registry from: " << registryPath << std::endl;
+        
         return true;
-
     } catch (const std::exception& e) {
-        lastError_ = std::string("Failed to load nodes registry: ") + e.what();
-        return false;
+        // Registry file might not exist, which is OK
+        return true;
     }
-}
-
-// Helper function to scan a single XML file for BehaviorTree definitions and load them
-static void scanAndLoadXmlFile(const std::string& filePath,
-                                std::unordered_set<std::string>& loadedTrees,
-                                BT::BehaviorTreeFactory* factory,
-                                int& successCount,
-                                int& failCount) {
-    std::ifstream file(filePath);
-    if (!file.is_open()) {
-        std::cerr << "  [FAIL] Cannot open file: " << filePath << std::endl;
-        failCount++;
-        return;
-    }
-
-    // Read entire file content to parse all BehaviorTree definitions
-    std::string content((std::istreambuf_iterator<char>(file)),
-                        std::istreambuf_iterator<char>());
-    file.close();
-
-    // Find all BehaviorTree definitions in the file
-    size_t pos = 0;
-    bool anyLoaded = false;
-    while ((pos = content.find("<BehaviorTree", pos)) != std::string::npos) {
-        size_t idPos = content.find("ID=\"", pos);
-        if (idPos != std::string::npos) {
-            size_t start = idPos + 4;
-            size_t end = content.find("\"", start);
-            if (end != std::string::npos) {
-                std::string treeId = content.substr(start, end - start);
-
-                // Skip if already loaded
-                if (loadedTrees.count(treeId) > 0) {
-                    pos = end;
-                    continue;
-                }
-
-                anyLoaded = true;
-            }
-        }
-        pos++;
-    }
-
-    // If file contains any unloaded trees, load the entire file
-    if (anyLoaded) {
-        try {
-            factory->registerBehaviorTreeFromFile(filePath);
-
-            // Re-parse to record loaded tree names
-            pos = 0;
-            while ((pos = content.find("<BehaviorTree", pos)) != std::string::npos) {
-                size_t idPos = content.find("ID=\"", pos);
-                if (idPos != std::string::npos) {
-                    size_t start = idPos + 4;
-                    size_t end = content.find("\"", start);
-                    if (end != std::string::npos) {
-                        std::string treeId = content.substr(start, end - start);
-                        loadedTrees.insert(treeId);
-                        std::cout << "  [OK] Preloaded: " << treeId << std::endl;
-                        successCount++;
-                    }
-                }
-                pos++;
-            }
-        } catch (const std::exception& e) {
-            std::cerr << "  [FAIL] Failed to load file: " << filePath
-                      << " (" << e.what() << ")" << std::endl;
-            failCount++;
-        }
-    }
-}
-
-// Helper function to recursively scan directory for XML files and load them
-static void scanAndLoadDirectoryRecursive(const std::string& directory,
-                                           std::unordered_set<std::string>& loadedTrees,
-                                           BT::BehaviorTreeFactory* factory,
-                                           int& successCount,
-                                           int& failCount) {
-#ifdef _WIN32
-    std::string searchPath = directory + "\\*";
-    WIN32_FIND_DATAA findData;
-    HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findData);
-
-    if (hFind == INVALID_HANDLE_VALUE) {
-        return;
-    }
-
-    do {
-        std::string name = findData.cFileName;
-
-        // Skip . and ..
-        if (name == "." || name == "..") continue;
-
-        std::string fullPath = directory + "\\" + name;
-
-        if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            // Recurse into subdirectory
-            scanAndLoadDirectoryRecursive(fullPath, loadedTrees, factory, successCount, failCount);
-        } else {
-            // Check if it's an XML file
-            if (name.size() > 4 && name.substr(name.size() - 4) == ".xml") {
-                scanAndLoadXmlFile(fullPath, loadedTrees, factory, successCount, failCount);
-            }
-        }
-    } while (FindNextFileA(hFind, &findData));
-
-    FindClose(hFind);
-#else
-    // Unix/Linux implementation using dirent.h
-    DIR* dir = opendir(directory.c_str());
-    if (!dir) return;
-
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != nullptr) {
-        std::string name = entry->d_name;
-
-        // Skip . and ..
-        if (name == "." || name == "..") continue;
-
-        std::string fullPath = directory + "/" + name;
-
-        struct stat statbuf;
-        if (stat(fullPath.c_str(), &statbuf) == 0) {
-            if (S_ISDIR(statbuf.st_mode)) {
-                // Recurse into subdirectory
-                scanAndLoadDirectoryRecursive(fullPath, loadedTrees, factory, successCount, failCount);
-            } else if (S_ISREG(statbuf.st_mode)) {
-                // Check if it's an XML file
-                if (name.size() > 4 && name.substr(name.size() - 4) == ".xml") {
-                    scanAndLoadXmlFile(fullPath, loadedTrees, factory, successCount, failCount);
-                }
-            }
-        }
-    }
-
-    closedir(dir);
-#endif
 }
 
 bool LuaBehaviorTreeBridge::preloadBehaviorTreesFromDirectory(const std::string& directory) {
     try {
-        // Check if directory exists using platform-specific method
+        // Check if directory exists
+        std::string searchPath = directory + "*.xml";
+        
 #ifdef _WIN32
-        DWORD attribs = GetFileAttributesA(directory.c_str());
-        if (attribs == INVALID_FILE_ATTRIBUTES || !(attribs & FILE_ATTRIBUTE_DIRECTORY)) {
-            lastError_ = "Directory does not exist or is not accessible: " + directory;
-            return false;
+        WIN32_FIND_DATAA findData;
+        HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findData);
+        
+        if (hFind == INVALID_HANDLE_VALUE) {
+            return true;  // Directory doesn't exist or is empty
         }
+        
+        do {
+            std::string fileName = findData.cFileName;
+            std::string filePath = directory + fileName;
+            
+            try {
+                factory_->registerBehaviorTreeFromFile(filePath);
+                
+                // Extract tree name from file name (without extension)
+                size_t lastDot = fileName.find_last_of('.');
+                std::string treeName = (lastDot != std::string::npos) ? 
+                                       fileName.substr(0, lastDot) : fileName;
+                loadedTreeDefinitions_.insert(treeName);
+                
+                std::cout << "[LuaBehaviorTreeBridge] Preloaded behavior tree: " << treeName << std::endl;
+            } catch (const std::exception& e) {
+                std::cerr << "[LuaBehaviorTreeBridge] Failed to preload " << filePath << ": " << e.what() << std::endl;
+            }
+        } while (FindNextFileA(hFind, &findData));
+        
+        FindClose(hFind);
 #else
-        struct stat statbuf;
-        if (stat(directory.c_str(), &statbuf) != 0 || !S_ISDIR(statbuf.st_mode)) {
-            lastError_ = "Directory does not exist or is not accessible: " + directory;
-            return false;
+        DIR* dir = opendir(directory.c_str());
+        if (!dir) {
+            return true;  // Directory doesn't exist
         }
+        
+        struct dirent* entry;
+        while ((entry = readdir(dir)) != nullptr) {
+            std::string fileName = entry->d_name;
+            
+            // Check if it's an XML file
+            if (fileName.length() > 4 && 
+                fileName.substr(fileName.length() - 4) == ".xml") {
+                std::string filePath = directory + fileName;
+                
+                try {
+                    factory_->registerBehaviorTreeFromFile(filePath);
+                    
+                    // Extract tree name from file name (without extension)
+                    size_t lastDot = fileName.find_last_of('.');
+                    std::string treeName = (lastDot != std::string::npos) ? 
+                                           fileName.substr(0, lastDot) : fileName;
+                    loadedTreeDefinitions_.insert(treeName);
+                    
+                    std::cout << "[LuaBehaviorTreeBridge] Preloaded behavior tree: " << treeName << std::endl;
+                } catch (const std::exception& e) {
+                    std::cerr << "[LuaBehaviorTreeBridge] Failed to preload " << filePath << ": " << e.what() << std::endl;
+                }
+            }
+        }
+        
+        closedir(dir);
 #endif
-
-        int successCount = 0;
-        int failCount = 0;
-
-        std::cout << "[LuaBehaviorTreeBridge] Preloading behavior trees from: " << directory << std::endl;
-
-        scanAndLoadDirectoryRecursive(directory, loadedTreeDefinitions_, factory_, successCount, failCount);
-
-        std::cout << "[LuaBehaviorTreeBridge] Preloaded " << successCount
-                  << " behavior trees";
-        if (failCount > 0) {
-            std::cout << " (" << failCount << " failed)";
-        }
-        std::cout << std::endl;
-
-        return failCount == 0;
-
+        
+        return true;
     } catch (const std::exception& e) {
-        lastError_ = std::string("Failed to preload behavior trees: ") + e.what();
+        std::cerr << "[LuaBehaviorTreeBridge] Error preloading behavior trees: " << e.what() << std::endl;
         return false;
     }
 }
