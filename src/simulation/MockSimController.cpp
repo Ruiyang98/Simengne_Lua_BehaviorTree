@@ -2,34 +2,7 @@
 #include "scripting/EntityScriptManager.h"
 #include <cmath>
 
-// Initialize static member
-MockSimController* MockSimController::instance_ = nullptr;
 
-MockSimController* MockSimController::getInstance() {
-    return instance_;
-}
-
-void MockSimController::setInstance(MockSimController* instance) {
-    instance_ = instance;
-    // Also set the base class instance
-    SimControlInterface::setInstance(instance);
-}
-
-MockSimController* MockSimController::createInstance() {
-    if (!instance_) {
-        instance_ = new MockSimController();
-        SimControlInterface::setInstance(instance_);
-    }
-    return instance_;
-}
-
-void MockSimController::destroyInstance() {
-    if (instance_) {
-        delete instance_;
-        instance_ = nullptr;
-        SimControlInterface::setInstance(nullptr);
-    }
-}
 
 MockSimController::MockSimController()
     : state_(0)

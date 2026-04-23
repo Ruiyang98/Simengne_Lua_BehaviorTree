@@ -378,7 +378,7 @@ void LuaSimBinding::registerSimAPI() {
 
     // Script manager API
     simTable.set_function("create_script_manager", [this](const std::string& entityId) -> sol::optional<sol::table> {
-        MockSimController* mockSim = MockSimController::getInstance();
+        MockSimController* mockSim = static_cast<MockSimController*>(SimControlInterface::getInstance());
         if (!mockSim) {
             std::cerr << "[LuaSimBinding] MockSimController instance is null" << std::endl;
             return sol::nullopt;
@@ -437,7 +437,7 @@ void LuaSimBinding::registerSimAPI() {
     });
     
     simTable.set_function("remove_script_manager", [](const std::string& entityId) -> bool {
-        MockSimController* mockSim = MockSimController::getInstance();
+        MockSimController* mockSim = static_cast<MockSimController*>(SimControlInterface::getInstance());
         if (!mockSim) {
             return false;
         }
@@ -445,7 +445,7 @@ void LuaSimBinding::registerSimAPI() {
     });
     
     simTable.set_function("get_script_manager", [this](const std::string& entityId) -> sol::optional<sol::table> {
-        MockSimController* mockSim = MockSimController::getInstance();
+        MockSimController* mockSim = static_cast<MockSimController*>(SimControlInterface::getInstance());
         if (!mockSim) {
             return sol::nullopt;
         }
@@ -502,7 +502,7 @@ void LuaSimBinding::registerSimAPI() {
     });
     
     simTable.set_function("has_script_manager", [](const std::string& entityId) -> bool {
-        MockSimController* mockSim = MockSimController::getInstance();
+        MockSimController* mockSim = static_cast<MockSimController*>(SimControlInterface::getInstance());
         if (!mockSim) {
             return false;
         }

@@ -31,7 +31,7 @@ void simpleExternalSchedulerExample() {
     std::cout << std::endl;
 
     // 1. Initialize simulation controller singleton
-    MockSimController* simController = MockSimController::createInstance();
+    MockSimController* simController = static_cast<MockSimController*>(SimControlInterface::getInstance());
     simController->setVerbose(true);
 
     // 2. Create behavior tree executor
@@ -120,7 +120,7 @@ void multiEntitySchedulerExample() {
     std::cout << std::endl;
 
     // 1. Initialize
-    MockSimController* simController = MockSimController::getInstance();
+    MockSimController* simController = static_cast<MockSimController*>(SimControlInterface::getInstance());
     simController->setVerbose(false);  // Reduce output
 
     BehaviorTreeExecutor executor;
@@ -204,7 +204,7 @@ public:
 
     bool initialize() {
         // Get simulation controller singleton
-        simController_ = MockSimController::getInstance();
+        simController_ = static_cast<MockSimController*>(SimControlInterface::getInstance());
         simController_->setVerbose(false);
 
         // Create behavior tree executor

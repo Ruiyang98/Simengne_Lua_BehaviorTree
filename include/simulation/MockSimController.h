@@ -17,14 +17,6 @@ namespace scripting {
 
 class MockSimController : public SimControlInterface {
 public:
-    // Singleton access
-    static MockSimController* getInstance();
-    static void setInstance(MockSimController* instance);
-    
-    // Create instance (for initial setup)
-    static MockSimController* createInstance();
-    static void destroyInstance();
-
     // Control commands
     bool start();
     bool pause();
@@ -76,11 +68,11 @@ public:
     bool hasScriptManager(const std::string& entityId) const;
     std::vector<std::string> getManagedEntityIds() const;
 
-private:
-    // Private constructor for singleton
+    // Meyers' singleton - allow SimControlInterface::getInstance() to create instance
     MockSimController();
     ~MockSimController();
 
+private:
     // Disable copy and assignment
     MockSimController(const MockSimController&) = delete;
     MockSimController& operator=(const MockSimController&) = delete;
@@ -92,9 +84,6 @@ private:
     void notifyStop();
     void notifyReset();
     VehicleID generateVehicleId();
-
-    // Singleton instance
-    static MockSimController* instance_;
 
     // State
     volatile int state_;

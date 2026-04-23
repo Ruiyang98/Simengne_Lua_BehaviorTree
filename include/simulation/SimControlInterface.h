@@ -106,10 +106,6 @@ public:
 
     // Singleton access - returns the implementation instance
     static SimControlInterface* getInstance();
-    static void setInstance(SimControlInterface* instance);
-
-protected:
-    static SimControlInterface* instance_;
 };
 
 #endif // SIM_CONTROL_INTERFACE_H

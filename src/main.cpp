@@ -98,7 +98,7 @@ bool executeBehaviorTree(const std::string& xmlFile, const std::string& treeName
     auto blackboard = BT::Blackboard::create();
 
     // Get sim controller
-    MockSimController* simController = MockSimController::getInstance();
+    MockSimController* simController = static_cast<MockSimController*>(SimControlInterface::getInstance());
     if (!simController) {
         std::cerr << "ERROR: SimController not available" << std::endl;
         return false;
@@ -160,7 +160,7 @@ bool executeBehaviorTree(const std::string& xmlFile, const std::string& treeName
 
 // List all entities
 void listEntities() {
-    MockSimController* simController = MockSimController::getInstance();
+    MockSimController* simController = static_cast<MockSimController*>(SimControlInterface::getInstance());
     if (!simController) {
         std::cerr << "ERROR: SimController not available" << std::endl;
         return;
@@ -180,7 +180,7 @@ void addEntity(const std::vector<std::string>& args) {
         return;
     }
 
-    MockSimController* simController = MockSimController::getInstance();
+    MockSimController* simController = static_cast<MockSimController*>(SimControlInterface::getInstance());
     if (!simController) {
         std::cerr << "ERROR: SimController not available" << std::endl;
         return;
@@ -293,7 +293,7 @@ bool executeAsyncBehaviorTree(const std::string& xmlFile, const std::string& ent
     auto blackboard = BT::Blackboard::create();
 
     // Get sim controller
-    MockSimController* simController = MockSimController::getInstance();
+    MockSimController* simController = static_cast<MockSimController*>(SimControlInterface::getInstance());
     if (!simController) {
         std::cerr << "ERROR: SimController not available" << std::endl;
         return false;
@@ -526,8 +526,8 @@ void runInteractiveMode(LuaSimBinding* luaBinding) {
 }
 
 int main(int argc, char* argv[]) {
-    // Create simulation controller singleton
-    MockSimController* simController = MockSimController::createInstance();
+    // Get simulation controller singleton (Meyers' singleton)
+    MockSimController* simController = static_cast<MockSimController*>(SimControlInterface::getInstance());
     simController->setVerbose(true);
     
     // Create behavior tree executor
@@ -583,8 +583,7 @@ int main(int argc, char* argv[]) {
     luaBinding.reset();
     g_btExecutor.reset();
     
-    // Clean up singleton
-    MockSimController::destroyInstance();
+    // Meyers' singleton will be automatically cleaned up at program exit
 
     return 0;
 }

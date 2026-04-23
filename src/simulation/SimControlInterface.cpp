@@ -1,15 +1,11 @@
 #include "simulation/SimControlInterface.h"
-
-// Initialize static member
-SimControlInterface* SimControlInterface::instance_ = nullptr;
+#include "simulation/MockSimController.h"
 
 SimControlInterface* SimControlInterface::getInstance() {
-    return instance_;
+    static MockSimController instance;
+    return &instance;
 }
 
-void SimControlInterface::setInstance(SimControlInterface* instance) {
-    instance_ = instance;
-}
 
 std::string SimControlInterface::stateToString(SimState state) {
     switch (state) {
