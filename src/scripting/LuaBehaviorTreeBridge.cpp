@@ -38,10 +38,24 @@ bool LuaBehaviorTreeBridge::initialize() {
         lastError_ = "Lua state or BT factory is null";
         return false;
     }
-    
+
     try {
         registerLuaNodeTypes();
         registerLuaAPI();
+
+        // Auto-load nodes registry
+        loadNodesRegistry("scripts/bt_nodes_registry.lua");
+
+        // Auto-preload behavior trees from default directories
+        const std::vector<std::string> defaultDirs = {
+            "bt_xml/",
+            "behavior_trees/"
+        };
+
+        for (const auto& dir : defaultDirs) {
+            preloadBehaviorTreesFromDirectory(dir);
+        }
+
         initialized_ = true;
         return true;
     } catch (const std::exception& e) {
@@ -176,28 +190,6 @@ void LuaBehaviorTreeBridge::registerLuaAPI() {
     btTable.set_function("set_tick_callback", [this](const std::string& entityId,
                                                       sol::protected_function callback) -> bool {
         return setTickCallback(entityId, callback);
-    });
-
-    // ==================== Preload API ====================
-
-    // Load global nodes registry script
-    btTable.set_function("load_registry", [this](sol::optional<std::string> registryPath) -> bool {
-        return loadNodesRegistry(registryPath.value_or("scripts/bt_nodes_registry.lua"));
-    });
-
-    // Scan behavior tree definitions
-    btTable.set_function("scan_trees", [this](const std::string& directory) -> bool {
-        return scanBehaviorTreeDefinitions(directory);
-    });
-
-    // Preload all scanned behavior trees
-    btTable.set_function("preload_all_trees", [this]() -> bool {
-        return preloadAllBehaviorTrees();
-    });
-
-    // Scan and preload all XML files from directory
-    btTable.set_function("preload_trees_from_dir", [this](const std::string& directory) -> bool {
-        return preloadBehaviorTreesFromDirectory(directory);
     });
 }
 
@@ -578,7 +570,7 @@ bool LuaBehaviorTreeBridge::setTickCallback(const std::string& entityId, sol::pr
     return true;
 }
 
-// ==================== Lazy Loading Implementation ====================
+// ==================== Preload Implementation ====================
 
 bool LuaBehaviorTreeBridge::loadNodesRegistry(const std::string& registryPath) {
     try {
@@ -606,36 +598,82 @@ bool LuaBehaviorTreeBridge::loadNodesRegistry(const std::string& registryPath) {
     }
 }
 
-// Helper function to scan a single XML file for BehaviorTree definitions
-static void scanXmlFileForTrees(const std::string& filePath,
-                                  std::unordered_map<std::string, std::string>& treePaths,
-                                  int& count) {
+// Helper function to scan a single XML file for BehaviorTree definitions and load them
+static void scanAndLoadXmlFile(const std::string& filePath,
+                                std::unordered_set<std::string>& loadedTrees,
+                                BT::BehaviorTreeFactory* factory,
+                                int& successCount,
+                                int& failCount) {
     std::ifstream file(filePath);
-    if (!file.is_open()) return;
+    if (!file.is_open()) {
+        std::cerr << "  [FAIL] Cannot open file: " << filePath << std::endl;
+        failCount++;
+        return;
+    }
 
-    std::string line;
-    while (std::getline(file, line)) {
-        // Simple parsing: find <BehaviorTree ID="xxx">
-        size_t pos = line.find("<BehaviorTree");
-        if (pos != std::string::npos) {
-            size_t idPos = line.find("ID=\"", pos);
-            if (idPos != std::string::npos) {
-                size_t start = idPos + 4;
-                size_t end = line.find("\"", start);
-                if (end != std::string::npos) {
-                    std::string treeId = line.substr(start, end - start);
-                    treePaths[treeId] = filePath;
-                    count++;
+    // Read entire file content to parse all BehaviorTree definitions
+    std::string content((std::istreambuf_iterator<char>(file)),
+                        std::istreambuf_iterator<char>());
+    file.close();
+
+    // Find all BehaviorTree definitions in the file
+    size_t pos = 0;
+    bool anyLoaded = false;
+    while ((pos = content.find("<BehaviorTree", pos)) != std::string::npos) {
+        size_t idPos = content.find("ID=\"", pos);
+        if (idPos != std::string::npos) {
+            size_t start = idPos + 4;
+            size_t end = content.find("\"", start);
+            if (end != std::string::npos) {
+                std::string treeId = content.substr(start, end - start);
+
+                // Skip if already loaded
+                if (loadedTrees.count(treeId) > 0) {
+                    pos = end;
+                    continue;
                 }
+
+                anyLoaded = true;
             }
+        }
+        pos++;
+    }
+
+    // If file contains any unloaded trees, load the entire file
+    if (anyLoaded) {
+        try {
+            factory->registerBehaviorTreeFromFile(filePath);
+
+            // Re-parse to record loaded tree names
+            pos = 0;
+            while ((pos = content.find("<BehaviorTree", pos)) != std::string::npos) {
+                size_t idPos = content.find("ID=\"", pos);
+                if (idPos != std::string::npos) {
+                    size_t start = idPos + 4;
+                    size_t end = content.find("\"", start);
+                    if (end != std::string::npos) {
+                        std::string treeId = content.substr(start, end - start);
+                        loadedTrees.insert(treeId);
+                        std::cout << "  [OK] Preloaded: " << treeId << std::endl;
+                        successCount++;
+                    }
+                }
+                pos++;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "  [FAIL] Failed to load file: " << filePath
+                      << " (" << e.what() << ")" << std::endl;
+            failCount++;
         }
     }
 }
 
-// Helper function to recursively scan directory for XML files
-static void scanDirectoryRecursive(const std::string& directory,
-                                    std::unordered_map<std::string, std::string>& treePaths,
-                                    int& count) {
+// Helper function to recursively scan directory for XML files and load them
+static void scanAndLoadDirectoryRecursive(const std::string& directory,
+                                           std::unordered_set<std::string>& loadedTrees,
+                                           BT::BehaviorTreeFactory* factory,
+                                           int& successCount,
+                                           int& failCount) {
 #ifdef _WIN32
     std::string searchPath = directory + "\\*";
     WIN32_FIND_DATAA findData;
@@ -655,11 +693,11 @@ static void scanDirectoryRecursive(const std::string& directory,
 
         if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
             // Recurse into subdirectory
-            scanDirectoryRecursive(fullPath, treePaths, count);
+            scanAndLoadDirectoryRecursive(fullPath, loadedTrees, factory, successCount, failCount);
         } else {
             // Check if it's an XML file
             if (name.size() > 4 && name.substr(name.size() - 4) == ".xml") {
-                scanXmlFileForTrees(fullPath, treePaths, count);
+                scanAndLoadXmlFile(fullPath, loadedTrees, factory, successCount, failCount);
             }
         }
     } while (FindNextFileA(hFind, &findData));
@@ -683,11 +721,11 @@ static void scanDirectoryRecursive(const std::string& directory,
         if (stat(fullPath.c_str(), &statbuf) == 0) {
             if (S_ISDIR(statbuf.st_mode)) {
                 // Recurse into subdirectory
-                scanDirectoryRecursive(fullPath, treePaths, count);
+                scanAndLoadDirectoryRecursive(fullPath, loadedTrees, factory, successCount, failCount);
             } else if (S_ISREG(statbuf.st_mode)) {
                 // Check if it's an XML file
                 if (name.size() > 4 && name.substr(name.size() - 4) == ".xml") {
-                    scanXmlFileForTrees(fullPath, treePaths, count);
+                    scanAndLoadXmlFile(fullPath, loadedTrees, factory, successCount, failCount);
                 }
             }
         }
@@ -697,7 +735,7 @@ static void scanDirectoryRecursive(const std::string& directory,
 #endif
 }
 
-bool LuaBehaviorTreeBridge::scanBehaviorTreeDefinitions(const std::string& directory) {
+bool LuaBehaviorTreeBridge::preloadBehaviorTreesFromDirectory(const std::string& directory) {
     try {
         // Check if directory exists using platform-specific method
 #ifdef _WIN32
@@ -714,64 +752,26 @@ bool LuaBehaviorTreeBridge::scanBehaviorTreeDefinitions(const std::string& direc
         }
 #endif
 
-        int count = 0;
-        scanDirectoryRecursive(directory, treeDefinitionPaths_, count);
+        int successCount = 0;
+        int failCount = 0;
 
-        std::cout << "[LuaBehaviorTreeBridge] Scanned " << count
-                  << " behavior tree definitions from " << directory << std::endl;
-        return true;
+        std::cout << "[LuaBehaviorTreeBridge] Preloading behavior trees from: " << directory << std::endl;
+
+        scanAndLoadDirectoryRecursive(directory, loadedTreeDefinitions_, factory_, successCount, failCount);
+
+        std::cout << "[LuaBehaviorTreeBridge] Preloaded " << successCount
+                  << " behavior trees";
+        if (failCount > 0) {
+            std::cout << " (" << failCount << " failed)";
+        }
+        std::cout << std::endl;
+
+        return failCount == 0;
 
     } catch (const std::exception& e) {
-        lastError_ = std::string("Failed to scan directory: ") + e.what();
+        lastError_ = std::string("Failed to preload behavior trees: ") + e.what();
         return false;
     }
-}
-
-bool LuaBehaviorTreeBridge::preloadAllBehaviorTrees() {
-    if (treeDefinitionPaths_.empty()) {
-        std::cout << "[LuaBehaviorTreeBridge] No tree definitions to preload" << std::endl;
-        return true;
-    }
-
-    int successCount = 0;
-    int totalCount = treeDefinitionPaths_.size();
-
-    std::cout << "[LuaBehaviorTreeBridge] Preloading " << totalCount
-              << " behavior tree definitions..." << std::endl;
-
-    for (const auto& pair : treeDefinitionPaths_) {
-        const std::string& treeName = pair.first;
-        const std::string& filePath = pair.second;
-
-        if (loadedTreeDefinitions_.count(treeName) > 0) {
-            successCount++;
-            continue;
-        }
-
-        if (loadBehaviorTreeFromFile(filePath)) {
-            loadedTreeDefinitions_.insert(treeName);
-            successCount++;
-            std::cout << "  [OK] Preloaded: " << treeName << std::endl;
-        } else {
-            std::cerr << "  [FAIL] Failed to preload: " << treeName
-                      << " (" << lastError_ << ")" << std::endl;
-        }
-    }
-
-    std::cout << "[LuaBehaviorTreeBridge] Preloaded " << successCount
-              << "/" << totalCount << " behavior trees" << std::endl;
-
-    return successCount == totalCount;
-}
-
-bool LuaBehaviorTreeBridge::preloadBehaviorTreesFromDirectory(const std::string& directory) {
-    // First scan the directory
-    if (!scanBehaviorTreeDefinitions(directory)) {
-        return false;
-    }
-
-    // Then preload all
-    return preloadAllBehaviorTrees();
 }
 
 } // namespace scripting
