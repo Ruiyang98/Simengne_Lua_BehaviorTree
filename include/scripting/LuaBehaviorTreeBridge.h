@@ -85,6 +85,12 @@ public:
     // Check if tree exists
     bool hasTree(const std::string& treeId);
 
+    // Load nodes registry from Lua file
+    bool loadNodesRegistry(const std::string& registryPath);
+
+    // Preload behavior trees from directory
+    bool preloadBehaviorTreesFromDirectory(const std::string& directory);
+
     // ==================== Async Execution API ====================
 
     // Execute behavior tree asynchronously (returns immediately, runs in background)

@@ -15,7 +15,7 @@ BehaviorTreeScheduler::BehaviorTreeScheduler()
 BehaviorTreeScheduler::~BehaviorTreeScheduler() {
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto& pair : entities_) {
-        if (pair.second->isRunning) {-
+        if (pair.second->isRunning) {
             pair.second->tree.haltTree();
             pair.second->isRunning = false;
         }

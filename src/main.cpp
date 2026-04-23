@@ -542,6 +542,10 @@ int main(int argc, char* argv[]) {
     } else {
         std::cout << "OK: Lua-BehaviorTree bridge initialized (registry and XML auto-loaded)" << std::endl;
     }
+    
+    // Set BehaviorTreeFactory for script manager support
+    g_simController->setBehaviorTreeFactory(&g_btExecutor->getFactory());
+    std::cout << "OK: Script manager support initialized" << std::endl;
     std::cout << std::endl;
 
     // Run interactive mode

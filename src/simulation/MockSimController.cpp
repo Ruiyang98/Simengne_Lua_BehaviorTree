@@ -1,4 +1,5 @@
 #include "simulation/MockSimController.h"
+#include "scripting/EntityScriptManager.h"
 #include <cmath>
 
 namespace simulation {
@@ -11,7 +12,9 @@ MockSimController::MockSimController()
     , autoUpdate_(false)
     , running_(false)
     , verbose_(true)
-    , nextVehicleId_(1) {
+    , nextVehicleId_(1)
+    , btFactory_(nullptr)
+    , scriptUpdateAccumulator_(0.0) {
 }
 
 MockSimController::~MockSimController() {
@@ -159,7 +162,90 @@ void MockSimController::setOnResetCallback(SimEventCallback callback) {
 void MockSimController::update(double deltaTime) {
     if (state_ == 1) {
         simTime_ = simTime_ + deltaTime * timeScale_;
+        
+        // 更新脚本
+        updateScripts(deltaTime);
     }
+}
+
+void MockSimController::updateScripts(double deltaTime) {
+    scriptUpdateAccumulator_ += deltaTime * timeScale_;
+    
+    if (scriptUpdateAccumulator_ >= SCRIPT_UPDATE_INTERVAL) {
+        scriptUpdateAccumulator_ -= SCRIPT_UPDATE_INTERVAL;
+        
+        // 遍历所有实体的脚本管理器并执行
+        for (auto& pair : entityScriptManagers_) {
+            try {
+                pair.second->executeAllScripts();
+            } catch (const std::exception& e) {
+                if (verbose_) {
+                    std::cout << "[MockSim] Error executing scripts for entity " << pair.first 
+                              << ": " << e.what() << std::endl;
+                }
+            }
+        }
+    }
+}
+
+void MockSimController::setBehaviorTreeFactory(BT::BehaviorTreeFactory* factory) {
+    btFactory_ = factory;
+}
+
+std::shared_ptr<scripting::EntityScriptManager> MockSimController::createScriptManager(const std::string& entityId) {
+    if (entityScriptManagers_.find(entityId) != entityScriptManagers_.end()) {
+        if (verbose_) {
+            std::cout << "[MockSim] Script manager already exists for entity: " << entityId << std::endl;
+        }
+        return entityScriptManagers_[entityId];
+    }
+    
+    auto manager = std::make_shared<scripting::EntityScriptManager>(entityId, this, btFactory_);
+    entityScriptManagers_[entityId] = manager;
+    
+    if (verbose_) {
+        std::cout << "[MockSim] Created script manager for entity: " << entityId << std::endl;
+    }
+    
+    return manager;
+}
+
+bool MockSimController::removeScriptManager(const std::string& entityId) {
+    auto it = entityScriptManagers_.find(entityId);
+    if (it == entityScriptManagers_.end()) {
+        return false;
+    }
+    
+    entityScriptManagers_.erase(it);
+    
+    if (verbose_) {
+        std::cout << "[MockSim] Removed script manager for entity: " << entityId << std::endl;
+    }
+    
+    return true;
+}
+
+std::shared_ptr<scripting::EntityScriptManager> MockSimController::getScriptManager(const std::string& entityId) {
+    auto it = entityScriptManagers_.find(entityId);
+    if (it != entityScriptManagers_.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
+
+bool MockSimController::hasScriptManager(const std::string& entityId) const {
+    return entityScriptManagers_.find(entityId) != entityScriptManagers_.end();
+}
+
+std::vector<std::string> MockSimController::getManagedEntityIds() const {
+    std::vector<std::string> ids;
+    ids.reserve(entityScriptManagers_.size());
+    
+    for (const auto& pair : entityScriptManagers_) {
+        ids.push_back(pair.first);
+    }
+    
+    return ids;
 }
 
 void MockSimController::setAutoUpdate(bool enable) {

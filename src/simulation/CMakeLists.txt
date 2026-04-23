@@ -14,6 +14,12 @@ target_include_directories(simulation PUBLIC
     ${CMAKE_SOURCE_DIR}/include
 )
 
+target_link_libraries(simulation PRIVATE
+    lua::lua
+    sol2::sol2
+    behaviortree::behaviortree_cpp_v3
+)
+
 # 设置 C++ 标准
 target_compile_features(simulation PUBLIC cxx_std_11)
 

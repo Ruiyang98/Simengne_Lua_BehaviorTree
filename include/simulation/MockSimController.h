@@ -2,11 +2,18 @@
 #define MOCK_SIM_CONTROLLER_H
 
 #include "simulation/SimControlInterface.h"
+#include <behaviortree_cpp_v3/bt_factory.h>
 #include <chrono>
 #include <thread>
 #include <iostream>
 #include <map>
 #include <atomic>
+#include <unordered_map>
+#include <memory>
+
+namespace scripting {
+    class EntityScriptManager;
+}
 
 namespace simulation {
 
@@ -58,6 +65,14 @@ public:
     bool setEntityMoveDirection(const VehicleID& entityId, double dx, double dy, double dz);
     double getEntityDistance(const VehicleID& entityId, double x, double y, double z);
 
+    // Script manager methods
+    void setBehaviorTreeFactory(BT::BehaviorTreeFactory* factory);
+    std::shared_ptr<scripting::EntityScriptManager> createScriptManager(const std::string& entityId);
+    bool removeScriptManager(const std::string& entityId);
+    std::shared_ptr<scripting::EntityScriptManager> getScriptManager(const std::string& entityId);
+    bool hasScriptManager(const std::string& entityId) const;
+    std::vector<std::string> getManagedEntityIds() const;
+
 private:
     void runSimulationLoop();
     void notifyStart();
@@ -91,6 +106,15 @@ private:
     // Entity storage
     std::map<VehicleID, Entity> entities_;
     std::atomic<int> nextVehicleId_;
+
+    // Script managers
+    std::unordered_map<std::string, std::shared_ptr<scripting::EntityScriptManager>> entityScriptManagers_;
+    BT::BehaviorTreeFactory* btFactory_;
+
+    // Script update
+    void updateScripts(double deltaTime);
+    double scriptUpdateAccumulator_;
+    static constexpr double SCRIPT_UPDATE_INTERVAL = 0.5; // 500ms
 };
 
 } // namespace simulation

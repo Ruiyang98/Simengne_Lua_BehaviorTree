@@ -1,5 +1,7 @@
 #include "scripting/LuaSimBinding.h"
 #include "scripting/LuaBehaviorTreeBridge.h"
+#include "scripting/EntityScriptManager.h"
+#include "simulation/MockSimController.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -344,6 +346,140 @@ void LuaSimBinding::registerSimAPI() {
                 }
             });
         }
+    });
+
+    // Script manager API
+    simTable.set_function("create_script_manager", [this](const std::string& entityId) -> sol::optional<sol::table> {
+        // 尝试将simInterface转换为MockSimController
+        simulation::MockSimController* mockSim = dynamic_cast<simulation::MockSimController*>(simInterface_);
+        if (!mockSim) {
+            std::cerr << "[LuaSimBinding] Failed to cast SimControlInterface to MockSimController" << std::endl;
+            return sol::nullopt;
+        }
+        
+        auto manager = mockSim->createScriptManager(entityId);
+        if (!manager) {
+            return sol::nullopt;
+        }
+        
+        // 创建脚本管理器表
+        sol::table managerTable = luaState_->create_table();
+        
+        // 添加方法
+        managerTable.set_function("add_tactical_script", [manager](const std::string& scriptName, const std::string& scriptCode) -> bool {
+            return manager->addTacticalScript(scriptName, scriptCode);
+        });
+        
+        managerTable.set_function("add_bt_script", [manager](const std::string& scriptName, 
+                                                              const std::string& xmlFile,
+                                                              const std::string& treeName,
+                                                              const std::string& scriptCode) -> bool {
+            return manager->addBTScript(scriptName, scriptCode, xmlFile, treeName);
+        });
+        
+        managerTable.set_function("remove_script", [manager](const std::string& scriptName) -> bool {
+            return manager->removeScript(scriptName);
+        });
+        
+        managerTable.set_function("enable_script", [manager](const std::string& scriptName) -> bool {
+            return manager->enableScript(scriptName);
+        });
+        
+        managerTable.set_function("disable_script", [manager](const std::string& scriptName) -> bool {
+            return manager->disableScript(scriptName);
+        });
+        
+        managerTable.set_function("get_scripts", [manager]() -> sol::table {
+            sol::table scripts = manager->getLuaState().create_table();
+            auto names = manager->getScriptNames();
+            for (size_t i = 0; i < names.size(); ++i) {
+                scripts[i + 1] = names[i];
+            }
+            return scripts;
+        });
+        
+        managerTable.set_function("has_script", [manager](const std::string& scriptName) -> bool {
+            return manager->hasScript(scriptName);
+        });
+        
+        managerTable.set_function("get_script_count", [manager]() -> int {
+            return static_cast<int>(manager->getScriptCount());
+        });
+        
+        return managerTable;
+    });
+    
+    simTable.set_function("remove_script_manager", [this](const std::string& entityId) -> bool {
+        simulation::MockSimController* mockSim = dynamic_cast<simulation::MockSimController*>(simInterface_);
+        if (!mockSim) {
+            return false;
+        }
+        return mockSim->removeScriptManager(entityId);
+    });
+    
+    simTable.set_function("get_script_manager", [this](const std::string& entityId) -> sol::optional<sol::table> {
+        simulation::MockSimController* mockSim = dynamic_cast<simulation::MockSimController*>(simInterface_);
+        if (!mockSim) {
+            return sol::nullopt;
+        }
+        
+        auto manager = mockSim->getScriptManager(entityId);
+        if (!manager) {
+            return sol::nullopt;
+        }
+        
+        // 创建脚本管理器表（同上）
+        sol::table managerTable = luaState_->create_table();
+        
+        managerTable.set_function("add_tactical_script", [manager](const std::string& scriptName, const std::string& scriptCode) -> bool {
+            return manager->addTacticalScript(scriptName, scriptCode);
+        });
+        
+        managerTable.set_function("add_bt_script", [manager](const std::string& scriptName, 
+                                                              const std::string& xmlFile,
+                                                              const std::string& treeName,
+                                                              const std::string& scriptCode) -> bool {
+            return manager->addBTScript(scriptName, scriptCode, xmlFile, treeName);
+        });
+        
+        managerTable.set_function("remove_script", [manager](const std::string& scriptName) -> bool {
+            return manager->removeScript(scriptName);
+        });
+        
+        managerTable.set_function("enable_script", [manager](const std::string& scriptName) -> bool {
+            return manager->enableScript(scriptName);
+        });
+        
+        managerTable.set_function("disable_script", [manager](const std::string& scriptName) -> bool {
+            return manager->disableScript(scriptName);
+        });
+        
+        managerTable.set_function("get_scripts", [manager]() -> sol::table {
+            sol::table scripts = manager->getLuaState().create_table();
+            auto names = manager->getScriptNames();
+            for (size_t i = 0; i < names.size(); ++i) {
+                scripts[i + 1] = names[i];
+            }
+            return scripts;
+        });
+        
+        managerTable.set_function("has_script", [manager](const std::string& scriptName) -> bool {
+            return manager->hasScript(scriptName);
+        });
+        
+        managerTable.set_function("get_script_count", [manager]() -> int {
+            return static_cast<int>(manager->getScriptCount());
+        });
+        
+        return managerTable;
+    });
+    
+    simTable.set_function("has_script_manager", [this](const std::string& entityId) -> bool {
+        simulation::MockSimController* mockSim = dynamic_cast<simulation::MockSimController*>(simInterface_);
+        if (!mockSim) {
+            return false;
+        }
+        return mockSim->hasScriptManager(entityId);
     });
 }
 

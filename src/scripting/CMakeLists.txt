@@ -5,6 +5,10 @@ set(SCRIPTING_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/LuaSimBinding.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/LuaBehaviorTreeBridge.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/LuaBehaviorTreeNodes.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Script.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/TacticalScript.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/BTScript.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/EntityScriptManager.cpp
 )
 
 # 创建静态库
