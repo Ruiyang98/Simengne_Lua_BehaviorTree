@@ -1,0 +1,119 @@
+<?xml version="1.0"?>
+<!--
+    Entity Behavior Tree
+    实体行为树定义
+    
+    优先级顺序（从高到低）：
+    1. 威胁响应 - 检测并打击威胁
+    2. 障碍物处理 - 检测并绕行障碍物
+    3. 用户路线 - 执行用户输入的移动路线
+-->
+<root main_tree_to_execute="EntityBehavior">
+
+    <!-- ============================================ -->
+    <!-- 主行为树：实体行为决策 -->
+    <!-- ============================================ -->
+    <BehaviorTree ID="EntityBehavior">
+        <Selector name="entity_behavior_selector">
+            <!-- 
+                分支1: 威胁响应（最高优先级）
+                如果传感器探测到威胁，移动到威胁位置并执行打击
+            -->
+            <Sequence name="threat_response">
+                <LuaCondition lua_node_name="SensorDetectThreat" 
+                              entity_id="{entity_id}" 
+                              sensor_range="{sensor_range|20}"/>
+                <LuaStatefulMove lua_node_name="MoveToThreat" 
+                                  entity_id="{entity_id}"
+                                  threshold="1.0"/>
+                <LuaAction lua_node_name="ExecuteAttack" 
+                           entity_id="{entity_id}" 
+                           target_id="{detected_threat_id}"/>
+            </Sequence>
+            
+            <!-- 
+                分支2: 障碍物处理（中等优先级）
+                如果前方有障碍物，绕行后继续移动
+            -->
+            <Sequence name="obstacle_avoidance">
+                <LuaCondition lua_node_name="HasObstacle" 
+                              entity_id="{entity_id}" 
+                              check_distance="{check_distance|5}"/>
+                <LuaAction lua_node_name="AvoidObstacle" 
+                           entity_id="{entity_id}"
+                           avoid_distance="{avoid_distance|3}"/>
+                <LuaAction lua_node_name="ResumeMovement" 
+                           entity_id="{entity_id}"/>
+            </Sequence>
+            
+            <!-- 
+                分支3: 执行用户输入路线（最低优先级）
+                如果没有威胁和障碍物，执行用户设定的移动路线
+            -->
+            <Sequence name="follow_user_path">
+                <LuaCondition lua_node_name="HasUserPath" 
+                              entity_id="{entity_id}"/>
+                <LuaStatefulMove lua_node_name="FollowUserPath" 
+                                  entity_id="{entity_id}"/>
+            </Sequence>
+        </Selector>
+    </BehaviorTree>
+
+    <!-- ============================================ -->
+    <!-- 简化版行为树：仅威胁检测 -->
+    <!-- ============================================ -->
+    <BehaviorTree ID="EntityBehaviorThreatOnly">
+        <Sequence name="threat_only_sequence">
+            <LuaCondition lua_node_name="SensorDetectThreat" 
+                          entity_id="{entity_id}" 
+                          sensor_range="{sensor_range|20}"/>
+            <LuaStatefulMove lua_node_name="MoveToThreat" 
+                              entity_id="{entity_id}"
+                              threshold="1.0"/>
+            <LuaAction lua_node_name="ExecuteAttack" 
+                       entity_id="{entity_id}" 
+                       target_id="{detected_threat_id}"/>
+        </Sequence>
+    </BehaviorTree>
+
+    <!-- ============================================ -->
+    <!-- 简化版行为树：仅用户路线 -->
+    <!-- ============================================ -->
+    <BehaviorTree ID="EntityBehaviorPathOnly">
+        <Sequence name="path_only_sequence">
+            <LuaCondition lua_node_name="HasUserPath" 
+                          entity_id="{entity_id}"/>
+            <LuaStatefulMove lua_node_name="FollowUserPath" 
+                              entity_id="{entity_id}"/>
+        </Sequence>
+    </BehaviorTree>
+
+    <!-- ============================================ -->
+    <!-- 简化版行为树：威胁 + 用户路线（无障碍物） -->
+    <!-- ============================================ -->
+    <BehaviorTree ID="EntityBehaviorThreatAndPath">
+        <Selector name="threat_and_path_selector">
+            <!-- 优先处理威胁 -->
+            <Sequence name="threat_response">
+                <LuaCondition lua_node_name="SensorDetectThreat" 
+                              entity_id="{entity_id}" 
+                              sensor_range="{sensor_range|20}"/>
+                <LuaStatefulMove lua_node_name="MoveToThreat" 
+                                  entity_id="{entity_id}"
+                                  threshold="1.0"/>
+                <LuaAction lua_node_name="ExecuteAttack" 
+                           entity_id="{entity_id}" 
+                           target_id="{detected_threat_id}"/>
+            </Sequence>
+            
+            <!-- 否则执行用户路线 -->
+            <Sequence name="follow_user_path">
+                <LuaCondition lua_node_name="HasUserPath" 
+                              entity_id="{entity_id}"/>
+                <LuaStatefulMove lua_node_name="FollowUserPath" 
+                                  entity_id="{entity_id}"/>
+            </Sequence>
+        </Selector>
+    </BehaviorTree>
+
+</root>
