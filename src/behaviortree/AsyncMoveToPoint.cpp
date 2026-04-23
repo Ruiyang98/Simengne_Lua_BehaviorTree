@@ -1,6 +1,5 @@
 #include "behaviortree/AsyncMoveToPoint.h"
 #include "behaviortree/SimControllerPtr.h"
-#include "behaviortree/BlackboardKeys.h"
 #include <iostream>
 #include <cmath>
 
@@ -47,7 +46,7 @@ BT::NodeStatus AsyncMoveToPoint::onStart() {
     }
 
     try {
-        vehicleId_ = blackboard->get<simulation::VehicleID>(BlackboardKeys::VEHICLE_ID);
+        vehicleId_ = blackboard->get<simulation::VehicleID>("vehicle_id");
     } catch (const std::exception& e) {
         std::cerr << "[AsyncMoveToPoint] Failed to get vehicle_id from blackboard: " << e.what() << std::endl;
         return BT::NodeStatus::FAILURE;

@@ -13,7 +13,7 @@
 #include "scripting/LuaSimBinding.h"
 #include "behaviortree/BehaviorTreeExecutor.h"
 #include "behaviortree/BehaviorTreeScheduler.h"
-#include "behaviortree/BlackboardKeys.h"
+
 
 using namespace simulation;
 using namespace scripting;
@@ -118,19 +118,19 @@ bool executeBehaviorTree(const std::string& xmlFile, const std::string& treeName
             std::cerr << "ERROR: Entity not found: " << entityIdStr << std::endl;
             return false;
         }
-        blackboard->set(BlackboardKeys::VEHICLE_ID, vehicleId);
+        blackboard->set("vehicle_id", vehicleId);
         std::cout << "INFO: Using specified entity: vehicle=" << vehicleId.vehicle << std::endl;
     } else {
         // Try to get an existing entity
         auto entities = g_simController->getAllEntities();
         if (!entities.empty()) {
             vehicleId = entities[0].id;
-            blackboard->set(BlackboardKeys::VEHICLE_ID, vehicleId);
+            blackboard->set("vehicle_id", vehicleId);
             std::cout << "INFO: Using existing entity: vehicle=" << vehicleId.vehicle << std::endl;
         } else {
             // Create a test entity
             vehicleId = g_simController->addEntity("npc", 0.0, 0.0, 0.0);
-            blackboard->set(BlackboardKeys::VEHICLE_ID, vehicleId);
+            blackboard->set("vehicle_id", vehicleId);
             std::cout << "INFO: Created test entity: vehicle=" << vehicleId.vehicle << std::endl;
         }
     }
@@ -293,7 +293,7 @@ bool executeAsyncBehaviorTree(const std::string& xmlFile, const std::string& ent
         return false;
     }
 
-    blackboard->set(BlackboardKeys::VEHICLE_ID, vehicleId);
+    blackboard->set("vehicle_id", vehicleId);
     std::cout << "INFO: Using specified entity: vehicle=" << vehicleId.vehicle << std::endl;
 
     std::cout << std::endl;

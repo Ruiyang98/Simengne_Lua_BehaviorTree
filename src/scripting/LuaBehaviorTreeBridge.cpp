@@ -1,5 +1,4 @@
 #include "scripting/LuaBehaviorTreeBridge.h"
-#include "behaviortree/BlackboardKeys.h"
 #include "behaviortree/BehaviorTreeScheduler.h"
 #include <iostream>
 #include <sstream>
@@ -253,7 +252,7 @@ std::string LuaBehaviorTreeBridge::executeBehaviorTree(const std::string& treeNa
         auto blackboard = BT::Blackboard::create();
         
         // Set entity ID
-        blackboard->set(behaviortree::BlackboardKeys::ENTITY_ID, entityId);
+        blackboard->set("entity_id", entityId);
         
         // Set additional parameters if provided
         if (params) {
@@ -483,7 +482,7 @@ bool LuaBehaviorTreeBridge::executeAsync(const std::string& treeName,
         auto blackboard = BT::Blackboard::create();
 
         // Set entity ID
-        blackboard->set(behaviortree::BlackboardKeys::ENTITY_ID, entityId);
+        blackboard->set("entity_id", entityId);
 
         // Set additional parameters if provided
         if (params) {
