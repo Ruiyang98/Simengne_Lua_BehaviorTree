@@ -1,15 +1,17 @@
--- 战术自动攻击脚本示例
--- 使用 entity.vars 存储变量，实现实体间变量隔离
+-- Tactical auto-attack script example
+-- Each script has its own state table for isolation
+-- Use entity.vars for sharing data between scripts
 
 print("[TacticalAutoAttack] Script loaded for entity: " .. entity.id)
 
-function execute()
-    -- 从 entity.vars 获取变量，使用默认值
-    local attack_count = entity.get_var("attack_count", 0)
-    local sensor_range = entity.get_var("sensor_range", 20)
-    local attack_range = entity.get_var("attack_range", 10)
+function execute(state)
+    -- state is the script's own state table
+    -- Initialize state variables with defaults
+    state.attack_count = state.attack_count or 0
+    state.sensor_range = state.sensor_range or 20
+    state.attack_range = state.attack_range or 10
     
-    -- 获取实体位置
+    -- Get entity position using global sim table
     local pos = sim.get_entity_position(tonumber(entity.id))
     if not pos then
         print("[TacticalAutoAttack] Failed to get position for entity: " .. entity.id)
@@ -17,42 +19,44 @@ function execute()
     end
     
     print(string.format("[TacticalAutoAttack] Entity %s at (%.1f, %.1f), attack_count=%d", 
-        entity.id, pos.x, pos.y, attack_count))
+        entity.id, pos.x, pos.y, state.attack_count))
     
-    -- 检测范围内敌人
+    -- Detect enemies in range
     local entities = sim.get_all_entities()
     local enemy_found = false
     local nearest_enemy = nil
-    local nearest_dist = sensor_range
+    local nearest_dist = state.sensor_range
     
     for _, e in ipairs(entities) do
-        -- 检查是否是敌人（类型为"enemy"或"threat"）
+        -- Check if it's an enemy (type is "enemy" or "threat")
         if tostring(e.id) ~= entity.id and 
            (e.type == "enemy" or e.type == "threat") then
             
             local dist = math.sqrt((pos.x - e.x)^2 + (pos.y - e.y)^2)
             
-            if dist <= sensor_range then
+            if dist <= state.sensor_range then
                 enemy_found = true
                 print(string.format("[TacticalAutoAttack] Enemy detected: vehicle=%s at distance %.1f", 
                                     tostring(e.id), dist))
                 
-                -- 记录最近的敌人
+                -- Track nearest enemy
                 if dist < nearest_dist then
                     nearest_dist = dist
                     nearest_enemy = e
                 end
                 
-                if dist <= attack_range then
-                    -- 在攻击范围内，执行打击
+                if dist <= state.attack_range then
+                    -- Within attack range, execute attack
                     print(string.format("[TacticalAutoAttack] ATTACKING enemy vehicle=%s at distance %.1f!", 
                                         tostring(e.id), dist))
-                    -- 增加攻击计数
-                    attack_count = attack_count + 1
-                    entity.set_var("attack_count", attack_count)
+                    -- Increment attack counter in script's own state
+                    state.attack_count = state.attack_count + 1
+                    
+                    -- Share data with other scripts via entity.vars
                     entity.set_var("last_target", e.id)
+                    entity.set_var("last_attack_time", sim.get_time())
                 else
-                    -- 敌人在传感器范围内但不在攻击范围内
+                    -- Enemy in sensor range but not attack range
                     print(string.format("[TacticalAutoAttack] Enemy vehicle=%s in sensor range (%.1f), moving closer...", 
                                         tostring(e.id), dist))
                 end
@@ -67,7 +71,7 @@ function execute()
                             tostring(nearest_enemy.id), nearest_dist))
     end
     
-    -- 演示其他变量操作方法
-    entity.set_var("last_check_time", sim.get_time())
-    entity.set_var("last_position", {x = pos.x, y = pos.y, z = pos.z})
+    -- Store script-specific state
+    state.last_check_time = sim.get_time()
+    state.last_position = {x = pos.x, y = pos.y, z = pos.z}
 end

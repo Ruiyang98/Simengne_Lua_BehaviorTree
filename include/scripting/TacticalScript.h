@@ -9,25 +9,28 @@
 namespace scripting {
 
 // Pure Lua tactical script
-// Executes in sandbox environment, uses entity.vars to store variables
+// Each script has its own state table for isolation
 class TacticalScript : public Script {
 public:
     TacticalScript(const std::string& name, 
                    const std::string& scriptCode,
                    sol::state& luaState, 
                    const std::string& entityId,
-                   sol::table& env);
+                   sol::table state);
     
     ~TacticalScript() override;
     
     // Execute script
     void execute() override;
     
+    // Get script state
+    sol::table& getState() { return state_; }
+    
 private:
     sol::state& luaState_;
     std::string entityId_;
-    sol::function executeFunc_;  // Lua execute function
-    sol::table env_;  // Sandbox environment
+    sol::function executeFunc_;
+    sol::table state_;  // Script's own state table
     
     // Initialize Lua script
     bool initializeScript(const std::string& scriptCode);

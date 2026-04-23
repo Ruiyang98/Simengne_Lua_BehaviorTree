@@ -13,12 +13,12 @@ EntityScriptManager::EntityScriptManager(const std::string& entityId,
     , luaState_(globalLuaState) {
     
     initializeEntityTable();
-    createSandbox();
 }
 
 EntityScriptManager::~EntityScriptManager() {
     std::lock_guard<std::mutex> lock(mutex_);
     scripts_.clear();
+    scriptStates_.clear();
 }
 
 void EntityScriptManager::initializeEntityTable() {
@@ -65,58 +65,14 @@ void EntityScriptManager::initializeEntityTable() {
         });
         
         // Store entity table in Lua registry using entityId as key
-        // This allows scripts to access via global variable, but each entity has its own table
         luaState_["_ENTITIES"] = luaState_["_ENTITIES"] || luaState_.create_table();
         luaState_["_ENTITIES"][entityId_] = entityTable_;
         
+        // Set global entity table for this entity (scripts can access via 'entity')
+        luaState_["entity"] = entityTable_;
+        
     } catch (const std::exception& e) {
         std::cerr << "[EntityScriptManager] Error initializing entity table: " << e.what() << std::endl;
-    }
-}
-
-void EntityScriptManager::createSandbox() {
-    try {
-        // Create sandbox environment table
-        env_ = luaState_.create_table();
-        
-        // Set sandbox accessible global variables
-        // Allow access to standard libraries
-        env_["print"] = luaState_["print"];
-        env_["pairs"] = luaState_["pairs"];
-        env_["ipairs"] = luaState_["ipairs"];
-        env_["next"] = luaState_["next"];
-        env_["tonumber"] = luaState_["tonumber"];
-        env_["tostring"] = luaState_["tostring"];
-        env_["type"] = luaState_["type"];
-        env_["math"] = luaState_["math"];
-        env_["table"] = luaState_["table"];
-        env_["string"] = luaState_["string"];
-        env_["coroutine"] = luaState_["coroutine"];
-        env_["os"] = luaState_["os"];
-        
-        // Allow access to sim and bt tables
-        env_["sim"] = luaState_["sim"];
-        env_["bt"] = luaState_["bt"];
-        
-        // Set entity table
-        env_["entity"] = entityTable_;
-        
-        // Set metatable to allow access to other global variables (read-only)
-        sol::table metaTable = luaState_.create_table();
-        metaTable.set_function("__index", [this](sol::table t, const std::string& key) -> sol::object {
-            // First search in env_
-            sol::object val = env_[key];
-            if (val != sol::nil) {
-                return val;
-            }
-            // Then search globally
-            return luaState_[key];
-        });
-        
-        env_[sol::metatable_key] = metaTable;
-        
-    } catch (const std::exception& e) {
-        std::cerr << "[EntityScriptManager] Error creating sandbox: " << e.what() << std::endl;
     }
 }
 
@@ -129,8 +85,14 @@ bool EntityScriptManager::addTacticalScript(const std::string& scriptName, const
     }
     
     try {
+        // Create script state table
+        sol::table scriptState = luaState_.create_table();
+        scriptState["_script_name"] = scriptName;
+        scriptStates_[scriptName] = scriptState;
+        
+        // Create script with state
         auto script = std::make_shared<TacticalScript>(
-            scriptName, scriptCode, luaState_, entityId_, env_);
+            scriptName, scriptCode, luaState_, entityId_, scriptState);
         
         scripts_[scriptName] = script;
         std::cout << "[EntityScriptManager] Added tactical script '" << scriptName 
@@ -169,9 +131,15 @@ bool EntityScriptManager::addBTScript(const std::string& scriptName,
     }
     
     try {
+        // Create script state table
+        sol::table scriptState = luaState_.create_table();
+        scriptState["_script_name"] = scriptName;
+        scriptStates_[scriptName] = scriptState;
+        
+        // Create script with state
         auto script = std::make_shared<BTScript>(
             scriptName, scriptCode, xmlFile, treeName,
-            luaState_, entityId_, factory_, env_);
+            luaState_, entityId_, factory_, scriptState);
         
         scripts_[scriptName] = script;
         std::cout << "[EntityScriptManager] Added BT script '" << scriptName 
@@ -194,6 +162,13 @@ bool EntityScriptManager::removeScript(const std::string& scriptName) {
     }
     
     scripts_.erase(it);
+    
+    // Clear script state
+    auto stateIt = scriptStates_.find(scriptName);
+    if (stateIt != scriptStates_.end()) {
+        scriptStates_.erase(stateIt);
+    }
+    
     std::cout << "[EntityScriptManager] Removed script '" << scriptName 
               << "' for entity " << entityId_ << std::endl;
     
@@ -229,8 +204,8 @@ bool EntityScriptManager::disableScript(const std::string& scriptName) {
 void EntityScriptManager::executeAllScripts() {
     std::lock_guard<std::mutex> lock(mutex_);
     
-    // Update entity table reference (prevent Lua GC)
-    env_["entity"] = entityTable_;
+    // Update global entity table reference
+    luaState_["entity"] = entityTable_;
     
     for (auto& pair : scripts_) {
         try {
@@ -274,6 +249,28 @@ std::shared_ptr<Script> EntityScriptManager::getScript(const std::string& script
     }
     
     return nullptr;
+}
+
+sol::optional<sol::table> EntityScriptManager::getScriptState(const std::string& scriptName) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = scriptStates_.find(scriptName);
+    if (it != scriptStates_.end()) {
+        return it->second;
+    }
+    
+    return sol::nullopt;
+}
+
+void EntityScriptManager::clearScriptState(const std::string& scriptName) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = scriptStates_.find(scriptName);
+    if (it != scriptStates_.end()) {
+        // Create new empty table
+        it->second = luaState_.create_table();
+        it->second["_script_name"] = scriptName;
+    }
 }
 
 } // namespace scripting

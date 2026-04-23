@@ -17,6 +17,7 @@ namespace scripting {
 
 // Entity script manager - one per entity
 // Uses global Lua state, each entity has its own variable table
+// Each script has its own state table for isolation
 class EntityScriptManager {
 public:
     // Constructor - receives global Lua state reference
@@ -70,6 +71,12 @@ public:
     // Get entity variables table
     sol::table& getVariables() { return variables_; }
     
+    // Get script state table
+    sol::optional<sol::table> getScriptState(const std::string& scriptName);
+    
+    // Clear script state
+    void clearScriptState(const std::string& scriptName);
+    
     // Get last error message
     const std::string& getLastError() const { return lastError_; }
     
@@ -81,7 +88,9 @@ private:
     // Entity related tables
     sol::table entityTable_;    // entity table (contains id, vars, methods)
     sol::table variables_;      // entity.vars variable storage
-    sol::table env_;            // script execution environment (sandbox)
+    
+    // Script states: scriptName -> state table
+    std::unordered_map<std::string, sol::table> scriptStates_;
     
     std::unordered_map<std::string, std::shared_ptr<Script>> scripts_;
     mutable std::mutex mutex_;
@@ -89,9 +98,6 @@ private:
     
     // Initialize entity table
     void initializeEntityTable();
-    
-    // Create sandbox environment for script execution
-    void createSandbox();
 };
 
 } // namespace scripting

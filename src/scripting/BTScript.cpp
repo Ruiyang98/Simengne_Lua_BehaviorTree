@@ -12,7 +12,7 @@ BTScript::BTScript(const std::string& name,
                    sol::state& luaState, 
                    const std::string& entityId,
                    BT::BehaviorTreeFactory* factory,
-                   sol::table& env)
+                   sol::table state)
     : Script(name, ScriptType::BEHAVIOR_TREE)
     , luaState_(luaState)
     , entityId_(entityId)
@@ -21,7 +21,7 @@ BTScript::BTScript(const std::string& name,
     , treeName_(treeName)
     , btInitialized_(false)
     , executeFunc_(sol::nil)
-    , env_(env) {
+    , state_(state) {
     
     if (!scriptCode.empty()) {
         if (!initializeScript(scriptCode)) {
@@ -38,9 +38,8 @@ BTScript::~BTScript() {
 
 bool BTScript::initializeScript(const std::string& scriptCode) {
     try {
-        // Execute script to define execute function in sandbox environment
-        sol::environment env(luaState_, sol::create, env_);
-        auto result = luaState_.script(scriptCode, env);
+        // Execute script in global environment to define execute function
+        auto result = luaState_.script(scriptCode);
         
         if (!result.valid()) {
             sol::error err = result;
@@ -48,8 +47,8 @@ bool BTScript::initializeScript(const std::string& scriptCode) {
             return false;
         }
         
-        // Get execute function from sandbox environment
-        executeFunc_ = env["execute"];
+        // Get execute function from global environment
+        executeFunc_ = luaState_["execute"];
         
         if (!executeFunc_.valid()) {
             std::cerr << "[BTScript] No 'execute' function found in script: " << name_ << std::endl;
@@ -122,11 +121,11 @@ void BTScript::execute() {
         return;
     }
     
-    // 1. Execute Lua logic (update blackboard, etc.)
+    // 1. Execute Lua logic with state
     if (executeFunc_.valid()) {
         try {
-            // Call execute function in sandbox environment
-            auto result = executeFunc_();
+            // Pass script's own state table to execute function
+            auto result = executeFunc_(state_);
             
             if (!result.valid()) {
                 sol::error err = result;
@@ -145,7 +144,7 @@ void BTScript::execute() {
         }
     }
     
-    // 3. Directly tick behavior tree (not through BehaviorTreeScheduler)
+    // 3. Directly tick behavior tree
     if (tree_.rootNode()) {
         try {
             BT::NodeStatus status = tree_.tickRoot();
