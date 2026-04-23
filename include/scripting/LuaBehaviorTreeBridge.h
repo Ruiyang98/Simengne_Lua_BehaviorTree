@@ -123,7 +123,13 @@ public:
     
     // Register Lua condition node
     bool registerLuaCondition(const std::string& name, sol::protected_function func);
-    
+
+    // Register Lua stateful action node
+    bool registerLuaStatefulAction(const std::string& name,
+                                   sol::protected_function onStart,
+                                   sol::protected_function onRunning,
+                                   sol::protected_function onHalted);
+
     // Get last error
     std::string getLastError() const { return lastError_; }
     

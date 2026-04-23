@@ -4,6 +4,7 @@
 set(SCRIPTING_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/LuaSimBinding.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/LuaBehaviorTreeBridge.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/LuaStatefulActionNode.cpp
 )
 
 # 创建静态库

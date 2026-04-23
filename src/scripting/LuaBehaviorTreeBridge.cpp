@@ -1,4 +1,5 @@
 #include "scripting/LuaBehaviorTreeBridge.h"
+#include "scripting/LuaStatefulActionNode.h"
 #include "behaviortree/BlackboardKeys.h"
 #include "behaviortree/BehaviorTreeScheduler.h"
 #include <iostream>
@@ -236,12 +237,16 @@ void LuaBehaviorTreeBridge::registerLuaNodeTypes() {
     // Set Lua state for parameter collection
     LuaActionNode::setLuaState(luaState_);
     LuaConditionNode::setLuaState(luaState_);
+    LuaStatefulActionNode::setLuaState(luaState_);
 
     // Register Lua action node type
     factory_->registerNodeType<LuaActionNode>("LuaAction");
 
     // Register Lua condition node type
     factory_->registerNodeType<LuaConditionNode>("LuaCondition");
+
+    // Register Lua stateful action node type
+    factory_->registerNodeType<LuaStatefulActionNode>("LuaStatefulAction");
 }
 
 void LuaBehaviorTreeBridge::registerLuaAPI() {
@@ -299,6 +304,14 @@ void LuaBehaviorTreeBridge::registerLuaAPI() {
     btTable.set_function("register_condition", [this](const std::string& name,
                                                        sol::protected_function func) -> bool {
         return registerLuaCondition(name, func);
+    });
+
+    // Register Lua stateful action
+    btTable.set_function("register_stateful_action", [this](const std::string& name,
+                                                             sol::protected_function onStart,
+                                                             sol::protected_function onRunning,
+                                                             sol::protected_function onHalted) -> bool {
+        return registerLuaStatefulAction(name, onStart, onRunning, onHalted);
     });
     
     // Check if tree exists
@@ -610,6 +623,19 @@ bool LuaBehaviorTreeBridge::registerLuaCondition(const std::string& name, sol::p
     }
     
     LuaConditionNode::setLuaFunction(name, func);
+    return true;
+}
+
+bool LuaBehaviorTreeBridge::registerLuaStatefulAction(const std::string& name,
+                                                      sol::protected_function onStart,
+                                                      sol::protected_function onRunning,
+                                                      sol::protected_function onHalted) {
+    if (!onStart.valid() || !onRunning.valid()) {
+        lastError_ = "Invalid Lua function (onStart and onRunning are required)";
+        return false;
+    }
+    
+    LuaStatefulActionNode::setLuaFunctions(name, onStart, onRunning, onHalted);
     return true;
 }
 

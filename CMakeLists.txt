@@ -25,6 +25,14 @@ target_link_libraries(my_app PRIVATE
     bt_nodes
 )
 
+# 创建外部调度示例程序
+add_executable(external_scheduler_example examples/external_scheduler_example.cpp)
+target_link_libraries(external_scheduler_example PRIVATE
+    simulation
+    script_system
+    bt_nodes
+)
+
 # 链接 Lua
 # link_lua(my_app)
 

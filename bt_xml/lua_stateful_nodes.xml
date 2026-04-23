@@ -1,0 +1,128 @@
+<?xml version="1.0"?>
+<root main_tree_to_execute="LuaStatefulMoveExample">
+
+    <!-- ============================================ -->
+    <!-- 示例1: 使用 LuaStatefulMoveTo 实现持续移动 -->
+    <!-- ============================================ -->
+    <BehaviorTree ID="LuaStatefulMoveExample">
+        <Sequence name="move_sequence">
+            <!-- 检查实体存在 -->
+            <CheckEntityExists entity_id="{entity_id}" />
+
+            <!-- 使用 LuaStatefulMoveTo 移动到目标点 -->
+            <!-- 这个节点会在多次 tick 中持续执行，直到到达目标 -->
+            <LuaStatefulMove lua_node_name="LuaStatefulMoveTo"
+                             entity_id="{entity_id}"
+                             x="10"
+                             y="0"
+                             speed="2.0"
+                             threshold="0.5" />
+
+            <!-- 到达后输出日志 -->
+            <LuaAction lua_node_name="LuaLogSuccess">
+                <entity_id>{entity_id}</entity_id>
+                <message>Reached destination (10, 0)</message>
+            </LuaAction>
+
+            <!-- 继续移动到下一个点 -->
+            <LuaStatefulMove lua_node_name="LuaStatefulMoveTo"
+                             entity_id="{entity_id}"
+                             x="10"
+                             y="10"
+                             speed="2.0"
+                             threshold="0.5" />
+
+            <!-- 返回起点 -->
+            <LuaStatefulMove lua_node_name="LuaStatefulMoveTo"
+                             entity_id="{entity_id}"
+                             x="0"
+                             y="0"
+                             speed="2.0"
+                             threshold="0.5" />
+        </Sequence>
+    </BehaviorTree>
+
+    <!-- ============================================ -->
+    <!-- 示例2: 使用 LuaStatefulPatrol 实现巡逻 -->
+    <!-- ============================================ -->
+    <BehaviorTree ID="LuaStatefulPatrolExample">
+        <Sequence name="patrol_sequence">
+            <CheckEntityExists entity_id="{entity_id}" />
+
+            <!-- 巡逻4个路径点，循环2次 -->
+            <LuaStatefulMove lua_node_name="LuaStatefulPatrol"
+                             entity_id="{entity_id}"
+                             waypoints="0,0;10,0;10,10;0,10"
+                             speed="3.0"
+                             cycles="2" />
+        </Sequence>
+    </BehaviorTree>
+
+    <!-- ============================================ -->
+    <!-- 示例3: 组合使用多个有状态节点 -->
+    <!-- ============================================ -->
+    <BehaviorTree ID="LuaStatefulComplexExample">
+        <Sequence name="complex_sequence">
+            <CheckEntityExists entity_id="{entity_id}" />
+
+            <!-- 移动到点A -->
+            <LuaStatefulMove lua_node_name="LuaStatefulMoveTo"
+                             entity_id="{entity_id}"
+                             x="5"
+                             y="0"
+                             speed="2.0" />
+
+            <!-- 等待2秒 -->
+            <LuaStatefulMove lua_node_name="LuaStatefulWait"
+                             entity_id="{entity_id}"
+                             duration="2" />
+
+            <!-- 移动到点B -->
+            <LuaStatefulMove lua_node_name="LuaStatefulMoveTo"
+                             entity_id="{entity_id}"
+                             x="5"
+                             y="5"
+                             speed="2.0" />
+
+            <!-- 等待1秒 -->
+            <LuaStatefulMove lua_node_name="LuaStatefulWait"
+                             entity_id="{entity_id}"
+                             duration="1" />
+
+            <!-- 返回起点 -->
+            <LuaStatefulMove lua_node_name="LuaStatefulMoveTo"
+                             entity_id="{entity_id}"
+                             x="0"
+                             y="0"
+                             speed="2.0" />
+        </Sequence>
+    </BehaviorTree>
+
+    <!-- ============================================ -->
+    <!-- 示例4: 与条件节点组合 -->
+    <!-- ============================================ -->
+    <BehaviorTree ID="LuaStatefulConditionalExample">
+        <Sequence name="conditional_sequence">
+            <CheckEntityExists entity_id="{entity_id}" />
+
+            <!-- 如果距离目标较远，使用快速移动 -->
+            <Fallback name="move_fallback">
+                <!-- 尝试直接移动（如果已经在附近会立即成功） -->
+                <LuaStatefulMove lua_node_name="LuaStatefulMoveTo"
+                                 entity_id="{entity_id}"
+                                 x="20"
+                                 y="20"
+                                 speed="1.0"
+                                 threshold="5.0" />
+
+                <!-- 否则使用快速移动 -->
+                <LuaStatefulMove lua_node_name="LuaStatefulMoveTo"
+                                 entity_id="{entity_id}"
+                                 x="20"
+                                 y="20"
+                                 speed="5.0" />
+            </Fallback>
+        </Sequence>
+    </BehaviorTree>
+
+</root>
