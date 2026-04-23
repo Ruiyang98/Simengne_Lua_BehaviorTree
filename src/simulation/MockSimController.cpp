@@ -1,4 +1,5 @@
 #include "simulation/MockSimController.h"
+#include <cmath>
 
 namespace simulation {
 
@@ -294,7 +295,52 @@ std::vector<Entity> MockSimController::getAllEntities() {
 }
 
 size_t MockSimController::getEntityCount() {
-    return entities_.size();
+	return entities_.size();
+}
+
+bool MockSimController::setEntityMoveDirection(const std::string& entityId, double dx, double dy, double dz) {
+    auto it = entities_.find(entityId);
+    if (it == entities_.end()) {
+        if (verbose_) {
+            std::cout << "[MockSim] Failed to set move direction for entity: " << entityId << " (not found)" << std::endl;
+        }
+        return false;
+    }
+    
+    // Normalize direction vector
+    double length = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (length > 0) {
+        dx /= length;
+        dy /= length;
+        dz /= length;
+    }
+    
+    // Store direction in the entity (using a simple approach - in real implementation
+    // this would be stored separately and applied during simulation update)
+    // For now, we just move the entity immediately by a small amount in that direction
+    double moveSpeed = 1.0; // units per tick
+    it->second.x += dx * moveSpeed;
+    it->second.y += dy * moveSpeed;
+    it->second.z += dz * moveSpeed;
+    
+    if (verbose_) {
+        std::cout << "[MockSim] Entity " << entityId << " moved in direction (" << dx << ", " << dy << ", " << dz << ")" << std::endl;
+    }
+    
+    return true;
+}
+
+double MockSimController::getEntityDistance(const std::string& entityId, double x, double y, double z) {
+    auto it = entities_.find(entityId);
+    if (it == entities_.end()) {
+        return -1.0;
+    }
+    
+    double dx = it->second.x - x;
+    double dy = it->second.y - y;
+    double dz = it->second.z - z;
+    
+    return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 
 } // namespace simulation

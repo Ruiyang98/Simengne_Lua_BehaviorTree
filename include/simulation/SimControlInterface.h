@@ -68,6 +68,12 @@ public:
     virtual std::vector<Entity> getAllEntities() = 0;
     virtual size_t getEntityCount() = 0;
 
+    // Set entity movement direction
+    virtual bool setEntityMoveDirection(const std::string& entityId, double dx, double dy, double dz) = 0;
+    
+    // Get distance from entity to target point
+    virtual double getEntityDistance(const std::string& entityId, double x, double y, double z) = 0;
+
     // Utility
     static std::string stateToString(SimState state);
 };

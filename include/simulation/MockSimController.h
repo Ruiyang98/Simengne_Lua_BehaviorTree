@@ -54,6 +54,10 @@ public:
     std::vector<Entity> getAllEntities();
     size_t getEntityCount();
 
+    // New movement interface
+    bool setEntityMoveDirection(const std::string& entityId, double dx, double dy, double dz);
+    double getEntityDistance(const std::string& entityId, double x, double y, double z);
+
 private:
     void runSimulationLoop();
     void notifyStart();

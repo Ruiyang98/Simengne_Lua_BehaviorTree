@@ -242,6 +242,22 @@ void LuaSimBinding::registerSimAPI() {
         return 0;
     });
 
+    // Set entity move direction
+    simTable.set_function("set_entity_move_direction", [this](const std::string& entityId, double dx, double dy, double dz) -> bool {
+        if (simInterface_) {
+            return simInterface_->setEntityMoveDirection(entityId, dx, dy, dz);
+        }
+        return false;
+    });
+
+    // Get entity distance to target point
+    simTable.set_function("get_entity_distance", [this](const std::string& entityId, double x, double y, double z) -> double {
+        if (simInterface_) {
+            return simInterface_->getEntityDistance(entityId, x, y, z);
+        }
+        return -1.0;
+    });
+
     // Event callbacks
     simTable.set_function("on_start", [this](sol::function callback) {
         if (simInterface_ && callback.valid()) {
