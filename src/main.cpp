@@ -541,6 +541,13 @@ int main(int argc, char* argv[]) {
         std::cout << "OK: Lua environment ready (without BT integration)" << std::endl;
     } else {
         std::cout << "OK: Lua-BehaviorTree bridge initialized" << std::endl;
+
+        // Auto-load bt_nodes_registry.lua
+        if (luaBinding->executeString("bt.load_registry()")) {
+            std::cout << "OK: Lua nodes registry loaded" << std::endl;
+        } else {
+            std::cerr << "WARNING: Failed to load Lua nodes registry: " << luaBinding->getLastError() << std::endl;
+        }
     }
     std::cout << std::endl;
 

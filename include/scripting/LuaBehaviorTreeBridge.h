@@ -3,8 +3,6 @@
 
 #include <behaviortree_cpp_v3/bt_factory.h>
 #include <behaviortree_cpp_v3/behavior_tree.h>
-#include <behaviortree_cpp_v3/action_node.h>
-#include <behaviortree_cpp_v3/condition_node.h>
 #include <sol.hpp>
 #include <string>
 #include <memory>
@@ -12,6 +10,9 @@
 #include <unordered_set>
 #include <functional>
 #include <mutex>
+#include <chrono>
+
+#include "scripting/LuaBehaviorTreeNodes.h"
 
 namespace scripting {
 
@@ -29,58 +30,6 @@ struct TreeExecutionInfo {
     std::chrono::steady_clock::time_point startTime;
     
     TreeExecutionInfo() : lastStatus(BT::NodeStatus::IDLE), isRunning(false) {}
-};
-
-// Lua Action Node - wraps Lua function as BT action node
-class LuaActionNode : public BT::SyncActionNode {
-public:
-    LuaActionNode(const std::string& name, const BT::NodeConfiguration& config);
-
-    // Return empty ports list to allow any input ports (for parameter passing)
-    static BT::PortsList providedPorts() { return {}; }
-
-    BT::NodeStatus tick() override;
-
-    // Set the Lua function to be called
-    static void setLuaFunction(const std::string& nodeName, sol::protected_function func);
-    static void clearLuaFunction(const std::string& nodeName);
-
-    // Set the Lua state for creating parameter tables
-    static void setLuaState(sol::state* state) { luaState_ = state; }
-
-private:
-    static std::unordered_map<std::string, sol::protected_function> luaFunctions_;
-    static std::mutex mutex_;
-    static sol::state* luaState_;
-
-    // Collect input ports into a Lua table
-    sol::table collectInputPorts();
-};
-
-// Lua Condition Node - wraps Lua function as BT condition node
-class LuaConditionNode : public BT::ConditionNode {
-public:
-    LuaConditionNode(const std::string& name, const BT::NodeConfiguration& config);
-
-    // Return empty ports list to allow any input ports (for parameter passing)
-    static BT::PortsList providedPorts() { return {}; }
-
-    BT::NodeStatus tick() override;
-
-    // Set the Lua function to be called
-    static void setLuaFunction(const std::string& nodeName, sol::protected_function func);
-    static void clearLuaFunction(const std::string& nodeName);
-
-    // Set the Lua state for creating parameter tables
-    static void setLuaState(sol::state* state) { luaState_ = state; }
-
-private:
-    static std::unordered_map<std::string, sol::protected_function> luaFunctions_;
-    static std::mutex mutex_;
-    static sol::state* luaState_;
-
-    // Collect input ports into a Lua table
-    sol::table collectInputPorts();
 };
 
 // Bridge class between Lua and BehaviorTree.CPP
