@@ -23,46 +23,11 @@ EntityScriptManager::~EntityScriptManager() {
 
 void EntityScriptManager::initializeEntityTable() {
     try {
-        // Create entity table
+        // Create entity table with only id
         entityTable_ = luaState_.create_table();
         
         // Set entity.id
         entityTable_["id"] = entityId_;
-        
-        // Create vars sub-table for variable storage
-        variables_ = luaState_.create_table();
-        entityTable_["vars"] = variables_;
-        
-        // Register variable operation methods
-        entityTable_.set_function("set_var", [this](const std::string& key, sol::object value) {
-            variables_[key] = value;
-        });
-        
-        entityTable_.set_function("get_var", [this](const std::string& key, sol::object defaultValue) -> sol::object {
-            sol::object val = variables_[key];
-            if (val == sol::nil && defaultValue != sol::nil) {
-                return defaultValue;
-            }
-            return val;
-        });
-        
-        entityTable_.set_function("has_var", [this](const std::string& key) -> bool {
-            sol::object val = variables_[key];
-            return val != sol::nil;
-        });
-        
-        entityTable_.set_function("remove_var", [this](const std::string& key) {
-            variables_[key] = sol::nil;
-        });
-        
-        entityTable_.set_function("clear_vars", [this]() {
-            variables_ = luaState_.create_table();
-            entityTable_["vars"] = variables_;
-        });
-        
-        entityTable_.set_function("get_all_vars", [this]() -> sol::table {
-            return variables_;
-        });
         
         // Store entity table in Lua registry using entityId as key
         luaState_["_ENTITIES"] = luaState_["_ENTITIES"] || luaState_.create_table();

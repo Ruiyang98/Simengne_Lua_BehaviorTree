@@ -16,7 +16,7 @@
 namespace scripting {
 
 // Entity script manager - one per entity
-// Uses global Lua state, each entity has its own variable table
+// Uses global Lua state
 // Each script has its own state table for isolation
 class EntityScriptManager {
 public:
@@ -65,11 +65,8 @@ public:
     // Get Lua state (global state)
     sol::state& getLuaState() { return luaState_; }
     
-    // Get entity table (contains vars and methods)
+    // Get entity table (contains only id)
     sol::table& getEntityTable() { return entityTable_; }
-    
-    // Get entity variables table
-    sol::table& getVariables() { return variables_; }
     
     // Get script state table
     sol::optional<sol::table> getScriptState(const std::string& scriptName);
@@ -85,9 +82,8 @@ private:
     BT::BehaviorTreeFactory* factory_;
     sol::state& luaState_;  // Reference to global Lua state
     
-    // Entity related tables
-    sol::table entityTable_;    // entity table (contains id, vars, methods)
-    sol::table variables_;      // entity.vars variable storage
+    // Entity table (contains only id)
+    sol::table entityTable_;
     
     // Script states: scriptName -> state table
     std::unordered_map<std::string, sol::table> scriptStates_;
