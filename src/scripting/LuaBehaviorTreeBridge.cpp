@@ -1,4 +1,6 @@
 #include "scripting/LuaBehaviorTreeBridge.h"
+#include "scripting/LuaSimBinding.h"
+#include "behaviortree/BehaviorTreeExecutor.h"
 #include <iostream>
 #include <sstream>
 #include <chrono>
@@ -15,9 +17,10 @@
 namespace scripting {
 
 // LuaBehaviorTreeBridge implementation
-LuaBehaviorTreeBridge::LuaBehaviorTreeBridge(sol::state* luaState, BT::BehaviorTreeFactory* factory)
-    : luaState_(luaState)
-    , factory_(factory)
+// Dependencies are obtained from singletons
+LuaBehaviorTreeBridge::LuaBehaviorTreeBridge()
+    : luaState_(&LuaSimBinding::getInstance().getState())
+    , factory_(&behaviortree::BehaviorTreeExecutor::getInstance().getFactory())
     , treeIdCounter_(0)
     , initialized_(false) {}
 

@@ -16,14 +16,12 @@
 namespace scripting {
 
 // Entity script manager - one per entity
-// Uses global Lua state
+// Uses global Lua state from LuaSimBinding singleton
 // Each script has its own state table for isolation
 class EntityScriptManager {
 public:
-    // Constructor - receives global Lua state reference
-    EntityScriptManager(const std::string& entityId, 
-                        sol::state& globalLuaState,
-                        BT::BehaviorTreeFactory* factory);
+    // Constructor - only needs entity ID
+    EntityScriptManager(const std::string& entityId);
     
     ~EntityScriptManager();
     
@@ -62,8 +60,8 @@ public:
     // Get script
     std::shared_ptr<Script> getScript(const std::string& scriptName) const;
     
-    // Get Lua state (global state)
-    sol::state& getLuaState() { return luaState_; }
+    // Get Lua state (global state from singleton)
+    sol::state& getLuaState();
     
     // Get entity table (contains only id)
     sol::table& getEntityTable() { return entityTable_; }
@@ -79,8 +77,7 @@ public:
     
 private:
     std::string entityId_;
-    BT::BehaviorTreeFactory* factory_;
-    sol::state& luaState_;  // Reference to global Lua state
+    sol::state* luaState_;  // Pointer to global Lua state from singleton
     
     // Entity table (contains only id)
     sol::table entityTable_;

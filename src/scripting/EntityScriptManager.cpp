@@ -1,16 +1,14 @@
 #include "scripting/EntityScriptManager.h"
+#include "scripting/LuaSimBinding.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
 
 namespace scripting {
 
-EntityScriptManager::EntityScriptManager(const std::string& entityId, 
-                                         sol::state& globalLuaState,
-                                         BT::BehaviorTreeFactory* factory)
+EntityScriptManager::EntityScriptManager(const std::string& entityId)
     : entityId_(entityId)
-    , factory_(factory)
-    , luaState_(globalLuaState) {
+    , luaState_(&LuaSimBinding::getInstance().getState()) {
     
     initializeEntityTable();
 }
@@ -24,17 +22,17 @@ EntityScriptManager::~EntityScriptManager() {
 void EntityScriptManager::initializeEntityTable() {
     try {
         // Create entity table with only id
-        entityTable_ = luaState_.create_table();
+        entityTable_ = luaState_->create_table();
         
         // Set entity.id
         entityTable_["id"] = entityId_;
         
         // Store entity table in Lua registry using entityId as key
-        luaState_["_ENTITIES"] = luaState_["_ENTITIES"] || luaState_.create_table();
-        luaState_["_ENTITIES"][entityId_] = entityTable_;
+        (*luaState_)["_ENTITIES"] = (*luaState_)["_ENTITIES"] || luaState_->create_table();
+        (*luaState_)["_ENTITIES"][entityId_] = entityTable_;
         
         // Set global entity table for this entity (scripts can access via 'entity')
-        luaState_["entity"] = entityTable_;
+        (*luaState_)["entity"] = entityTable_;
         
     } catch (const std::exception& e) {
         std::cerr << "[EntityScriptManager] Error initializing entity table: " << e.what() << std::endl;
@@ -51,13 +49,13 @@ bool EntityScriptManager::addTacticalScript(const std::string& scriptName, const
     
     try {
         // Create script state table
-        sol::table scriptState = luaState_.create_table();
+        sol::table scriptState = luaState_->create_table();
         scriptState["_script_name"] = scriptName;
         scriptStates_[scriptName] = scriptState;
         
         // Create script with state
         auto script = std::make_shared<TacticalScript>(
-            scriptName, scriptCode, luaState_, entityId_, scriptState);
+            scriptName, scriptCode, entityId_, scriptState);
         
         scripts_[scriptName] = script;
         std::cout << "[EntityScriptManager] Added tactical script '" << scriptName 
@@ -97,14 +95,14 @@ bool EntityScriptManager::addBTScript(const std::string& scriptName,
     
     try {
         // Create script state table
-        sol::table scriptState = luaState_.create_table();
+        sol::table scriptState = luaState_->create_table();
         scriptState["_script_name"] = scriptName;
         scriptStates_[scriptName] = scriptState;
         
         // Create script with state
         auto script = std::make_shared<BTScript>(
             scriptName, scriptCode, xmlFile, treeName,
-            luaState_, entityId_, factory_, scriptState);
+            entityId_, scriptState);
         
         scripts_[scriptName] = script;
         std::cout << "[EntityScriptManager] Added BT script '" << scriptName 
@@ -170,7 +168,7 @@ void EntityScriptManager::executeAllScripts() {
     std::lock_guard<std::mutex> lock(mutex_);
     
     // Update global entity table reference
-    luaState_["entity"] = entityTable_;
+    (*luaState_)["entity"] = entityTable_;
     
     for (auto& pair : scripts_) {
         try {
@@ -216,6 +214,10 @@ std::shared_ptr<Script> EntityScriptManager::getScript(const std::string& script
     return nullptr;
 }
 
+sol::state& EntityScriptManager::getLuaState() {
+    return *luaState_;
+}
+
 sol::optional<sol::table> EntityScriptManager::getScriptState(const std::string& scriptName) {
     std::lock_guard<std::mutex> lock(mutex_);
     
@@ -233,7 +235,7 @@ void EntityScriptManager::clearScriptState(const std::string& scriptName) {
     auto it = scriptStates_.find(scriptName);
     if (it != scriptStates_.end()) {
         // Create new empty table
-        it->second = luaState_.create_table();
+        it->second = luaState_->create_table();
         it->second["_script_name"] = scriptName;
     }
 }

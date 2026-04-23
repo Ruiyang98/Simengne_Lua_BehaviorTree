@@ -14,7 +14,6 @@ class TacticalScript : public Script {
 public:
     TacticalScript(const std::string& name, 
                    const std::string& scriptCode,
-                   sol::state& luaState, 
                    const std::string& entityId,
                    sol::table state);
     
@@ -27,7 +26,7 @@ public:
     sol::table& getState() { return state_; }
     
 private:
-    sol::state& luaState_;
+    sol::state* luaState_;
     std::string entityId_;
     sol::function executeFunc_;
     sol::table state_;  // Script's own state table

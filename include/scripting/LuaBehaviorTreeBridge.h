@@ -33,9 +33,12 @@ struct TreeExecutionInfo {
 };
 
 // Bridge class between Lua and BehaviorTree.CPP
+// Dependencies are obtained from singletons:
+// - sol::state from LuaSimBinding::getInstance()
+// - BT::BehaviorTreeFactory from BehaviorTreeExecutor::getInstance()
 class LuaBehaviorTreeBridge {
 public:
-    explicit LuaBehaviorTreeBridge(sol::state* luaState, BT::BehaviorTreeFactory* factory);
+    LuaBehaviorTreeBridge();
     ~LuaBehaviorTreeBridge();
     
     // Initialize the bridge

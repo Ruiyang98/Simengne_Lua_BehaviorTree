@@ -19,9 +19,7 @@ public:
              const std::string& scriptCode,
              const std::string& xmlFile, 
              const std::string& treeName,
-             sol::state& luaState, 
              const std::string& entityId,
-             BT::BehaviorTreeFactory* factory,
              sol::table state);
     
     ~BTScript() override;
@@ -42,7 +40,7 @@ public:
     sol::table& getState() { return state_; }
     
 private:
-    sol::state& luaState_;
+    sol::state* luaState_;
     std::string entityId_;
     BT::BehaviorTreeFactory* factory_;
     

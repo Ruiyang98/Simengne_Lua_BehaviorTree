@@ -78,10 +78,8 @@ public:
     void setVerbose(bool verbose);
     bool isVerbose() const;
 
-    // Set behavior tree factory for script manager support
-    void setBehaviorTreeFactory(BT::BehaviorTreeFactory* factory);
-
     // Entity script manager methods (C++ layer only)
+    // Dependencies are obtained from singletons (LuaSimBinding and BehaviorTreeExecutor)
     std::shared_ptr<scripting::EntityScriptManager> createScriptManager(const std::string& entityId);
     bool removeScriptManager(const std::string& entityId);
     std::shared_ptr<scripting::EntityScriptManager> getScriptManager(const std::string& entityId) const;
@@ -125,7 +123,6 @@ private:
     bool running_;
     bool paused_;
 
-    BT::BehaviorTreeFactory* btFactory_;
     std::unordered_map<std::string, std::shared_ptr<scripting::EntityScriptManager>> entityScriptManagers_;
 };
 

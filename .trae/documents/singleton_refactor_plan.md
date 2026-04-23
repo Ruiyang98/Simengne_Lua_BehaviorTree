@@ -1,240 +1,228 @@
-# BehaviorTreeFactory、LuaSimBinding 改为单例模式计划
+# 构造函数依赖注入改为单例获取重构计划
 
-## 目标
+## 1. 重构目标
 
-将 `BehaviorTreeFactory` 和 `LuaSimBinding` 改为单例模式，确保全局唯一实例。
+将以下类的构造函数中传入的 `globalLuaState` 和 `factory` 改为从单例获取：
+- `EntityScriptManager`
+- `TacticalScript`
+- `BTScript`
+- `LuaBehaviorTreeBridge`
 
-## 注意
+## 2. 单例来源
 
-- `BehaviorTreeFactory` 来自第三方库 BehaviorTree.CPP，不能直接修改，需要通过包装器实现单例
-- `LuaSimBinding` 可以修改其实现为单例模式
+- `sol::state`: 从 `LuaSimBinding::getInstance()` 获取
+- `BT::BehaviorTreeFactory`: 从 `BehaviorTreeExecutor::getInstance()` 获取（需要将 BehaviorTreeExecutor 改为单例）
 
-## 架构设计
+## 3. 具体修改内容
 
-### 1. BehaviorTreeFactory 单例包装器
+### 3.1 修改 BehaviorTreeExecutor 为单例
 
-由于 `BT::BehaviorTreeFactory` 是第三方类，创建单例包装器：
+**文件**: `include/behaviortree/BehaviorTreeExecutor.h`
 
 ```cpp
-class BehaviorTreeFactorySingleton {
+class BehaviorTreeExecutor {
 public:
-    static BT::BehaviorTreeFactory& getInstance();
+    // Get singleton instance
+    static BehaviorTreeExecutor& getInstance();
     
-    // 删除拷贝和赋值
-    BehaviorTreeFactorySingleton(const BehaviorTreeFactorySingleton&) = delete;
-    BehaviorTreeFactorySingleton& operator=(const BehaviorTreeFactorySingleton&) = delete;
-
+    // Disable copy and assignment
+    BehaviorTreeExecutor(const BehaviorTreeExecutor&) = delete;
+    BehaviorTreeExecutor& operator=(const BehaviorTreeExecutor&) = delete;
+    
+    // Get factory
+    BT::BehaviorTreeFactory& getFactory() { return factory_; }
+    
+    // ... other public methods
+    
 private:
-    BehaviorTreeFactorySingleton();
-    ~BehaviorTreeFactorySingleton();
+    BehaviorTreeExecutor();  // Private constructor
+    ~BehaviorTreeExecutor();
+    
+    // ... existing members
 };
 ```
 
-### 2. LuaSimBinding 单例改造
-
-将 `LuaSimBinding` 改为单例模式：
+**文件**: `src/behaviortree/BehaviorTreeExecutor.cpp`
 
 ```cpp
-class LuaSimBinding {
-public:
-    static LuaSimBinding& getInstance();
-    
-    // 初始化方法（替代构造函数参数）
-    bool initialize(simulation::SimControlInterface* simInterface);
-    
-    // 删除拷贝和赋值
-    LuaSimBinding(const LuaSimBinding&) = delete;
-    LuaSimBinding& operator=(const LuaSimBinding&) = delete;
-
-private:
-    LuaSimBinding();
-    ~LuaSimBinding();
-    
-    // 原有成员...
-};
-```
-
-## 实现步骤
-
-### Phase 1: 创建 BehaviorTreeFactory 单例包装器
-
-1. 创建新文件 `include/behaviortree/BehaviorTreeFactorySingleton.h`
-2. 创建新文件 `src/behaviortree/BehaviorTreeFactorySingleton.cpp`
-3. 实现单例逻辑（Meyer's Singleton 或静态成员变量）
-
-### Phase 2: 改造 LuaSimBinding 为单例
-
-1. 修改 `include/scripting/LuaSimBinding.h`：
-   - 构造函数改为 private
-   - 添加 `getInstance()` 静态方法
-   - 添加 `initialize()` 方法接收 simInterface
-   - 删除拷贝构造函数和赋值操作符
-
-2. 修改 `src/scripting/LuaSimBinding.cpp`：
-   - 实现单例逻辑
-   - 修改构造函数逻辑到 initialize 方法
-
-### Phase 3: 更新 BehaviorTreeExecutor
-
-1. 修改 `include/behaviortree/BehaviorTreeExecutor.h`：
-   - 移除 `factory_` 成员变量
-   - 修改 `getFactory()` 返回单例引用
-
-2. 修改 `src/behaviortree/BehaviorTreeExecutor.cpp`：
-   - 所有使用 `factory_` 的地方改为使用单例
-
-### Phase 4: 更新 main.cpp
-
-1. 移除 `g_btExecutor` 全局变量中的 factory 相关逻辑
-2. 使用 `LuaSimBinding::getInstance()` 获取实例
-3. 更新所有使用 LuaSimBinding 的地方
-
-### Phase 5: 更新其他依赖代码
-
-1. 更新 `EntityScriptManager` 获取 factory 的方式
-2. 更新 `LuaBehaviorTreeBridge` 获取 factory 的方式
-3. 更新所有调用 `g_btExecutor->getFactory()` 的地方
-
-### Phase 6: 测试验证
-
-1. 编译项目
-2. 运行测试确保功能正常
-3. 验证单例行为正确
-
-## 代码示例
-
-### BehaviorTreeFactorySingleton.h
-
-```cpp
-#ifndef BEHAVIOR_TREE_FACTORY_SINGLETON_H
-#define BEHAVIOR_TREE_FACTORY_SINGLETON_H
-
-#include <behaviortree_cpp_v3/bt_factory.h>
-
-namespace behaviortree {
-
-class BehaviorTreeFactorySingleton {
-public:
-    // 获取全局唯一实例
-    static BT::BehaviorTreeFactory& getInstance();
-    
-    // 删除拷贝构造和赋值
-    BehaviorTreeFactorySingleton(const BehaviorTreeFactorySingleton&) = delete;
-    BehaviorTreeFactorySingleton& operator=(const BehaviorTreeFactorySingleton&) = delete;
-
-private:
-    BehaviorTreeFactorySingleton() = default;
-    ~BehaviorTreeFactorySingleton() = default;
-};
-
-} // namespace behaviortree
-
-#endif // BEHAVIOR_TREE_FACTORY_SINGLETON_H
-```
-
-### BehaviorTreeFactorySingleton.cpp
-
-```cpp
-#include "behaviortree/BehaviorTreeFactorySingleton.h"
-
-namespace behaviortree {
-
-BT::BehaviorTreeFactory& BehaviorTreeFactorySingleton::getInstance() {
-    static BT::BehaviorTreeFactory instance;
+// Meyers' singleton implementation
+BehaviorTreeExecutor& BehaviorTreeExecutor::getInstance() {
+    static BehaviorTreeExecutor instance;
     return instance;
 }
 
-} // namespace behaviortree
+BehaviorTreeExecutor::BehaviorTreeExecutor()
+    : initialized_(false)
+    , treeIdCounter_(0)
+{
+}
+
+BehaviorTreeExecutor::~BehaviorTreeExecutor() {
+    // Halt all running trees
+    std::lock_guard<std::mutex> lock(treesMutex_);
+    for (auto& pair : activeTrees_) {
+        if (pair.second->isRunning) {
+            pair.second->tree.haltTree();
+        }
+    }
+    activeTrees_.clear();
+}
 ```
 
-### LuaSimBinding.h (修改后)
+### 3.2 修改 TacticalScript
+
+**文件**: `include/scripting/TacticalScript.h`
 
 ```cpp
-#ifndef LUA_SIM_BINDING_H
-#define LUA_SIM_BINDING_H
+// 修改前
+TacticalScript(const std::string& name, 
+               const std::string& scriptCode,
+               sol::state& luaState, 
+               const std::string& entityId,
+               sol::table state);
 
-#include "simulation/SimControlInterface.h"
-#include <behaviortree_cpp_v3/bt_factory.h>
-#include <sol.hpp>
-#include <memory>
-#include <string>
-#include <functional>
-#include <vector>
-
-namespace scripting {
-
-class LuaBehaviorTreeBridge;
-
-class LuaSimBinding {
-public:
-    // 获取全局唯一实例
-    static LuaSimBinding& getInstance();
-    
-    // 初始化（替代原构造函数参数）
-    bool initialize(simulation::SimControlInterface* simInterface);
-    
-    // 删除拷贝构造和赋值
-    LuaSimBinding(const LuaSimBinding&) = delete;
-    LuaSimBinding& operator=(const LuaSimBinding&) = delete;
-
-    // 原有公共接口保持不变...
-    bool executeScript(const std::string& scriptPath);
-    bool executeString(const std::string& scriptCode);
-    sol::state& getState();
-    bool isInitialized() const;
-    const std::string& getLastError() const;
-    
-    LuaBehaviorTreeBridge* getBehaviorTreeBridge() const { return btBridge_.get(); }
-    bool initializeBehaviorTree(BT::BehaviorTreeFactory* factory);
-    bool isBehaviorTreeInitialized() const { return btBridge_ != nullptr; }
-
-private:
-    // 私有构造函数
-    LuaSimBinding();
-    ~LuaSimBinding();
-    
-    void registerFunctions();
-    void registerSimAPI();
-    void registerUtilityFunctions();
-    void setupCallbacks();
-
-    simulation::SimControlInterface* simInterface_;
-    std::unique_ptr<sol::state> luaState_;
-    std::unique_ptr<LuaBehaviorTreeBridge> btBridge_;
-    bool initialized_;
-    std::string lastError_;
-    std::vector<sol::protected_function> luaCallbacks_;
-};
-
-} // namespace scripting
-
-#endif // LUA_SIM_BINDING_H
+// 修改后
+TacticalScript(const std::string& name, 
+               const std::string& scriptCode,
+               const std::string& entityId,
+               sol::table state);
 ```
 
-## 影响范围
+**文件**: `src/scripting/TacticalScript.cpp`
 
-### 需要修改的文件
+- 移除构造函数中的 `luaState` 参数
+- 在构造函数内部通过 `LuaSimBinding::getInstance().getState()` 获取
+- 修改 `luaState_` 成员为指针类型
 
-1. **新增文件**:
-   - `include/behaviortree/BehaviorTreeFactorySingleton.h`
-   - `src/behaviortree/BehaviorTreeFactorySingleton.cpp`
+### 3.3 修改 BTScript
 
-2. **修改文件**:
-   - `include/scripting/LuaSimBinding.h`
-   - `src/scripting/LuaSimBinding.cpp`
-   - `include/behaviortree/BehaviorTreeExecutor.h`
-   - `src/behaviortree/BehaviorTreeExecutor.cpp`
-   - `src/main.cpp`
-   - `src/scripting/LuaBehaviorTreeBridge.cpp` (可能)
-   - `include/scripting/EntityScriptManager.h` (可能)
-   - `src/scripting/EntityScriptManager.cpp` (可能)
+**文件**: `include/scripting/BTScript.h`
 
-3. **CMakeLists.txt**:
-   - 添加新源文件到 `src/behaviortree/CMakeLists.txt`
+```cpp
+// 修改前
+BTScript(const std::string& name, 
+         const std::string& scriptCode,
+         const std::string& xmlFile, 
+         const std::string& treeName,
+         sol::state& luaState, 
+         const std::string& entityId,
+         BT::BehaviorTreeFactory* factory,
+         sol::table state);
 
-## 注意事项
+// 修改后
+BTScript(const std::string& name, 
+         const std::string& scriptCode,
+         const std::string& xmlFile, 
+         const std::string& treeName,
+         const std::string& entityId,
+         sol::table state);
+```
 
-1. **线程安全**: Meyer's Singleton 在 C++11 及以上是线程安全的
-2. **初始化顺序**: 确保单例在使用前已初始化
-3. **生命周期**: 单例在程序结束时自动销毁
-4. **测试**: 需要验证所有原有功能正常工作
+**文件**: `src/scripting/BTScript.cpp`
+
+- 移除构造函数中的 `luaState` 和 `factory` 参数
+- 在构造函数内部通过单例获取
+- 修改 `luaState_` 为指针，`factory_` 保持指针
+
+### 3.4 修改 EntityScriptManager
+
+**文件**: `include/scripting/EntityScriptManager.h`
+
+```cpp
+// 修改前
+EntityScriptManager(const std::string& entityId, 
+                    sol::state& globalLuaState,
+                    BT::BehaviorTreeFactory* factory);
+
+// 修改后
+EntityScriptManager(const std::string& entityId);
+```
+
+**文件**: `src/scripting/EntityScriptManager.cpp`
+
+- 移除构造函数中的 `globalLuaState` 和 `factory` 参数
+- 在构造函数内部通过单例获取
+- 修改 `addTacticalScript` 和 `addBTScript` 方法，内部创建脚本时不再传递这些参数
+
+### 3.5 修改 LuaBehaviorTreeBridge
+
+**文件**: `include/scripting/LuaBehaviorTreeBridge.h`
+
+```cpp
+// 修改前
+explicit LuaBehaviorTreeBridge(sol::state* luaState, BT::BehaviorTreeFactory* factory);
+
+// 修改后
+LuaBehaviorTreeBridge();
+```
+
+**文件**: `src/scripting/LuaBehaviorTreeBridge.cpp`
+
+- 移除构造函数中的参数
+- 在构造函数内部通过单例获取
+
+### 3.6 更新 MockSimController
+
+**文件**: `include/simulation/MockSimController.h` 和 `src/simulation/MockSimController.cpp`
+
+- 修改 `createScriptManager` 方法：
+  ```cpp
+  // 修改前
+  std::shared_ptr<scripting::EntityScriptManager> createScriptManager(const std::string& entityId);
+  // 内部: new EntityScriptManager(entityId, luaState, factory)
+  
+  // 修改后
+  std::shared_ptr<scripting::EntityScriptManager> createScriptManager(const std::string& entityId);
+  // 内部: new EntityScriptManager(entityId)
+  ```
+- 移除 `btFactory_` 成员变量
+- 移除 `setBehaviorTreeFactory` 方法
+
+### 3.7 更新 main.cpp
+
+**文件**: `src/main.cpp`
+
+- 修改 BehaviorTreeExecutor 的使用：
+  ```cpp
+  // 修改前
+  g_btExecutor.reset(new BehaviorTreeExecutor());
+  if (!g_btExecutor->initialize()) { ... }
+  
+  // 修改后
+  BehaviorTreeExecutor& btExecutor = BehaviorTreeExecutor::getInstance();
+  if (!btExecutor.initialize()) { ... }
+  ```
+- 修改 LuaSimBinding 的初始化（移除 factory 参数）
+- 修改 LuaBehaviorTreeBridge 的创建
+- 移除 `setBehaviorTreeFactory` 调用
+
+## 4. 修改后的调用流程
+
+```
+main()
+  ├── LuaSimBinding::getInstance().initialize()
+  ├── BehaviorTreeExecutor::getInstance().initialize()
+  └── runInteractiveMode()
+       └── (用户命令)
+            └── simController->createScriptManager(entityId)
+                 └── new EntityScriptManager(entityId)  <-- 无参数
+                      └── addBTScript()
+                           └── new BTScript(...)  <-- 无luaState/factory参数
+```
+
+## 5. 实施步骤
+
+1. **修改 BehaviorTreeExecutor 为单例** (h + cpp)
+2. **修改 TacticalScript** (h + cpp)
+3. **修改 BTScript** (h + cpp)
+4. **修改 EntityScriptManager** (h + cpp)
+5. **修改 LuaBehaviorTreeBridge** (h + cpp)
+6. **更新 MockSimController** (h + cpp)
+7. **更新 main.cpp**
+8. **编译验证**
+
+## 6. 注意事项
+
+1. **初始化顺序**: 确保 LuaSimBinding 和 BehaviorTreeExecutor 在使用前已初始化
+2. **线程安全**: Meyers' singleton 是线程安全的
+3. **循环依赖**: 检查是否有循环依赖问题

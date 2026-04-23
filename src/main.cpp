@@ -17,8 +17,8 @@
 using namespace scripting;
 using namespace behaviortree;
 
-// Global BT executor
-std::unique_ptr<BehaviorTreeExecutor> g_btExecutor;
+// Global BT executor reference
+BehaviorTreeExecutor* g_btExecutor = nullptr;
 
 // Trim whitespace from both ends of a string
 std::string trim(const std::string& str) {
@@ -70,16 +70,14 @@ void printUsage() {
 
 // Execute behavior tree from command
 bool executeBehaviorTree(const std::string& xmlFile, const std::string& treeName, const std::string& entityIdStr = "") {
-    if (!g_btExecutor) {
-        std::cerr << "ERROR: Behavior tree executor not initialized" << std::endl;
-        return false;
-    }
+    // Get BehaviorTreeExecutor singleton
+    BehaviorTreeExecutor& btExecutor = BehaviorTreeExecutor::getInstance();
 
     std::cout << "----------------------------------------" << std::endl;
 
     // Load behavior tree XML file
-    if (!g_btExecutor->loadFromFile(xmlFile)) {
-        std::cerr << "ERROR: Failed to load behavior tree: " << g_btExecutor->getLastError() << std::endl;
+    if (!btExecutor.loadFromFile(xmlFile)) {
+        std::cerr << "ERROR: Failed to load behavior tree: " << btExecutor.getLastError() << std::endl;
         return false;
     }
 
@@ -136,7 +134,7 @@ bool executeBehaviorTree(const std::string& xmlFile, const std::string& treeName
     std::cout << "----------------------------------------" << std::endl;
 
     // Execute behavior tree
-    BT::NodeStatus status = g_btExecutor->execute(treeName, blackboard);
+    BT::NodeStatus status = btExecutor.execute(treeName, blackboard);
 
     std::cout << "----------------------------------------" << std::endl;
 
@@ -339,13 +337,14 @@ int main(int argc, char* argv[]) {
     MockSimController* simController = static_cast<MockSimController*>(SimControlInterface::getInstance());
     simController->setVerbose(true);
     
-    // Create behavior tree executor
-    g_btExecutor.reset(new BehaviorTreeExecutor());
-    if (!g_btExecutor->initialize()) {
+    // Initialize BehaviorTreeExecutor singleton
+    BehaviorTreeExecutor& btExecutor = BehaviorTreeExecutor::getInstance();
+    if (!btExecutor.initialize()) {
         std::cerr << "ERROR: Failed to initialize behavior tree executor: " 
-                  << g_btExecutor->getLastError() << std::endl;
+                  << btExecutor.getLastError() << std::endl;
         return 1;
     }
+    g_btExecutor = &btExecutor;
     
     // Interactive mode
     std::cout << "========================================" << std::endl;
@@ -359,8 +358,8 @@ int main(int argc, char* argv[]) {
     // Initialize Lua binding singleton
     scripting::LuaSimBinding& luaBinding = scripting::LuaSimBinding::getInstance();
 
-    // Initialize Lua environment with BT factory
-    if (!luaBinding.initialize(&g_btExecutor->getFactory())) {
+    // Initialize Lua environment (factory is obtained from BehaviorTreeExecutor singleton internally)
+    if (!luaBinding.initialize()) {
         std::cerr << "Lua initialization failed: " << luaBinding.getLastError() << std::endl;
         return 1;
     }
@@ -375,8 +374,7 @@ int main(int argc, char* argv[]) {
         std::cout << "OK: Lua-BehaviorTree bridge initialized (registry and XML auto-loaded)" << std::endl;
     }
     
-    // Set BehaviorTreeFactory for script manager support
-    simController->setBehaviorTreeFactory(&g_btExecutor->getFactory());
+    // Script manager support is now automatically handled through singletons
     std::cout << "OK: Script manager support initialized" << std::endl;
     std::cout << std::endl;
 
@@ -390,9 +388,7 @@ int main(int argc, char* argv[]) {
 
     // Cleanup
     // LuaBinding singleton will be automatically cleaned up
-    g_btExecutor.reset();
+    // BehaviorTreeExecutor singleton will be automatically cleaned up at program exit
     
-    // Meyers' singleton will be automatically cleaned up at program exit
-
     return 0;
 }

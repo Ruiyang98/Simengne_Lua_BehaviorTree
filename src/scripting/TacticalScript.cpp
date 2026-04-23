@@ -1,15 +1,15 @@
 #include "scripting/TacticalScript.h"
+#include "scripting/LuaSimBinding.h"
 #include <iostream>
 
 namespace scripting {
 
 TacticalScript::TacticalScript(const std::string& name, 
                                const std::string& scriptCode,
-                               sol::state& luaState, 
                                const std::string& entityId,
                                sol::table state)
     : Script(name, ScriptType::TACTICAL)
-    , luaState_(luaState)
+    , luaState_(&LuaSimBinding::getInstance().getState())
     , entityId_(entityId)
     , executeFunc_(sol::nil)
     , state_(state) {
@@ -26,7 +26,7 @@ bool TacticalScript::initializeScript(const std::string& scriptCode) {
     try {
         // Execute script in global environment to define execute function
         // The function will capture state when called
-        auto result = luaState_.script(scriptCode);
+        auto result = luaState_->script(scriptCode);
         
         if (!result.valid()) {
             sol::error err = result;
@@ -35,7 +35,7 @@ bool TacticalScript::initializeScript(const std::string& scriptCode) {
         }
         
         // Get execute function from global environment
-        executeFunc_ = luaState_["execute"];
+        executeFunc_ = (*luaState_)["execute"];
         
         if (!executeFunc_.valid()) {
             std::cerr << "[TacticalScript] No 'execute' function found in script: " << name_ << std::endl;

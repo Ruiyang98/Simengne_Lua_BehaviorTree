@@ -14,8 +14,7 @@ MockSimController::MockSimController()
     , running_(false)
     , paused_(false)
     , verbose_(true)
-    , nextVehicleId_(1)
-    , btFactory_(nullptr) {
+    , nextVehicleId_(1) {
 }
 
 MockSimController::~MockSimController() {
@@ -173,9 +172,7 @@ bool MockSimController::isVerbose() const {
     return verbose_;
 }
 
-void MockSimController::setBehaviorTreeFactory(BT::BehaviorTreeFactory* factory) {
-    btFactory_ = factory;
-}
+// setBehaviorTreeFactory removed - factory is now obtained from BehaviorTreeExecutor singleton
 
 VehicleID MockSimController::generateVehicleId() {
     VehicleID id;
@@ -336,20 +333,21 @@ std::shared_ptr<scripting::EntityScriptManager> MockSimController::createScriptM
         return entityScriptManagers_[entityId];
     }
     
-    // Get global Lua state
+    // Get global Lua state from singleton
     scripting::LuaSimBinding& luaBinding = scripting::LuaSimBinding::getInstance();
     if (!luaBinding.isInitialized()) {
         if (verbose_) {
             std::cout << "[MockSim] Lua binding not initialized, initializing now..." << std::endl;
         }
-        if (!luaBinding.initialize(btFactory_)) {
+        // Initialize without factory parameter - factory is obtained from BehaviorTreeExecutor singleton
+        if (!luaBinding.initialize()) {
             std::cerr << "[MockSim] Failed to initialize Lua binding" << std::endl;
             return nullptr;
         }
     }
     
-    // Create EntityScriptManager using global Lua state
-    auto manager = std::make_shared<scripting::EntityScriptManager>(entityId, luaBinding.getState(), btFactory_);
+    // Create EntityScriptManager - dependencies are obtained from singletons internally
+    auto manager = std::make_shared<scripting::EntityScriptManager>(entityId);
     entityScriptManagers_[entityId] = manager;
     
     if (verbose_) {

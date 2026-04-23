@@ -1,4 +1,6 @@
 #include "scripting/BTScript.h"
+#include "scripting/LuaSimBinding.h"
+#include "behaviortree/BehaviorTreeExecutor.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -9,14 +11,12 @@ BTScript::BTScript(const std::string& name,
                    const std::string& scriptCode,
                    const std::string& xmlFile, 
                    const std::string& treeName,
-                   sol::state& luaState, 
                    const std::string& entityId,
-                   BT::BehaviorTreeFactory* factory,
                    sol::table state)
     : Script(name, ScriptType::BEHAVIOR_TREE)
-    , luaState_(luaState)
+    , luaState_(&LuaSimBinding::getInstance().getState())
     , entityId_(entityId)
-    , factory_(factory)
+    , factory_(&behaviortree::BehaviorTreeExecutor::getInstance().getFactory())
     , xmlFile_(xmlFile)
     , treeName_(treeName)
     , btInitialized_(false)
@@ -39,7 +39,7 @@ BTScript::~BTScript() {
 bool BTScript::initializeScript(const std::string& scriptCode) {
     try {
         // Execute script in global environment to define execute function
-        auto result = luaState_.script(scriptCode);
+        auto result = luaState_->script(scriptCode);
         
         if (!result.valid()) {
             sol::error err = result;
@@ -48,7 +48,7 @@ bool BTScript::initializeScript(const std::string& scriptCode) {
         }
         
         // Get execute function from global environment
-        executeFunc_ = luaState_["execute"];
+        executeFunc_ = (*luaState_)["execute"];
         
         if (!executeFunc_.valid()) {
             std::cerr << "[BTScript] No 'execute' function found in script: " << name_ << std::endl;

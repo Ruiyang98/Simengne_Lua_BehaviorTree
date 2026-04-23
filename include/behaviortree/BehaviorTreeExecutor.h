@@ -24,10 +24,15 @@ struct TreeExecutionInfo {
 };
 
 // Behavior tree executor: manages loading and execution of behavior trees
+// Singleton pattern - global unique instance
 class BehaviorTreeExecutor {
 public:
-    BehaviorTreeExecutor();
-    ~BehaviorTreeExecutor();
+    // Get singleton instance
+    static BehaviorTreeExecutor& getInstance();
+    
+    // Disable copy and assignment
+    BehaviorTreeExecutor(const BehaviorTreeExecutor&) = delete;
+    BehaviorTreeExecutor& operator=(const BehaviorTreeExecutor&) = delete;
     
     // Initialize: register custom nodes
     bool initialize();
@@ -61,6 +66,9 @@ public:
     BT::BehaviorTreeFactory& getFactory() { return factory_; }
 
 private:
+    BehaviorTreeExecutor();  // Private constructor
+    ~BehaviorTreeExecutor();
+    
     BT::BehaviorTreeFactory factory_;
     std::string lastError_;
     bool initialized_;

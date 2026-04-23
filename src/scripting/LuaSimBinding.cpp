@@ -1,6 +1,7 @@
 #include "scripting/LuaSimBinding.h"
 #include "scripting/LuaBehaviorTreeBridge.h"
 #include "scripting/EntityScriptManager.h"
+#include "behaviortree/BehaviorTreeExecutor.h"
 #include "simulation/MockSimController.h"
 #include <iostream>
 #include <fstream>
@@ -66,9 +67,11 @@ bool LuaSimBinding::initialize(BT::BehaviorTreeFactory* factory) {
 
         initialized_ = true;
         
-        // If factory provided, auto-initialize behavior tree bridge
-        if (factory) {
-            return initializeBehaviorTree(factory);
+        // Auto-initialize behavior tree bridge (factory is obtained from singleton if not provided)
+        bool btResult = initializeBehaviorTree(factory);
+        if (!btResult) {
+            // BT bridge initialization failed, but Lua environment is still usable
+            std::cerr << "WARNING: Behavior tree bridge initialization failed: " << getLastError() << std::endl;
         }
         
         return true;
@@ -420,13 +423,20 @@ bool LuaSimBinding::initializeBehaviorTree(BT::BehaviorTreeFactory* factory) {
         return false;
     }
     
+    // If factory is null, get from BehaviorTreeExecutor singleton
     if (!factory) {
-        lastError_ = "BT factory is null";
-        return false;
+        try {
+            // Get factory from BehaviorTreeExecutor singleton
+            factory = &behaviortree::BehaviorTreeExecutor::getInstance().getFactory();
+        } catch (const std::exception& e) {
+            lastError_ = std::string("Failed to get factory from BehaviorTreeExecutor: ") + e.what();
+            return false;
+        }
     }
     
     try {
-        btBridge_ = std::make_unique<LuaBehaviorTreeBridge>(luaState_.get(), factory);
+        // Create bridge with factory
+        btBridge_ = std::make_unique<LuaBehaviorTreeBridge>();
         return btBridge_->initialize();
     } catch (const std::exception& e) {
         lastError_ = std::string("Failed to initialize BT bridge: ") + e.what();

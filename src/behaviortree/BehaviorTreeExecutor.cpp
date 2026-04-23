@@ -8,6 +8,12 @@
 
 namespace behaviortree {
 
+// Meyers' singleton implementation
+BehaviorTreeExecutor& BehaviorTreeExecutor::getInstance() {
+    static BehaviorTreeExecutor instance;
+    return instance;
+}
+
 BehaviorTreeExecutor::BehaviorTreeExecutor()
     : initialized_(false)
     , treeIdCounter_(0)
