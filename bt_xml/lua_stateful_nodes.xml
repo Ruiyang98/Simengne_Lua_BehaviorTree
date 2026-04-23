@@ -7,7 +7,7 @@
     <BehaviorTree ID="LuaStatefulMoveExample">
         <Sequence name="move_sequence">
             <!-- 检查实体存在 -->
-            <CheckEntityExists entity_id="{entity_id}" />
+            <CheckEntityExists vehicle_id="{vehicle_id}" />
 
             <!-- 使用 LuaStatefulMoveTo 移动到目标点 -->
             <!-- 这个节点会在多次 tick 中持续执行，直到到达目标 -->
@@ -47,7 +47,7 @@
     <!-- ============================================ -->
     <BehaviorTree ID="LuaStatefulPatrolExample">
         <Sequence name="patrol_sequence">
-            <CheckEntityExists entity_id="{entity_id}" />
+            <CheckEntityExists vehicle_id="{vehicle_id}" />
 
             <!-- 巡逻4个路径点，循环2次 -->
             <LuaStatefulMove lua_node_name="LuaStatefulPatrol"
@@ -63,7 +63,7 @@
     <!-- ============================================ -->
     <BehaviorTree ID="LuaStatefulComplexExample">
         <Sequence name="complex_sequence">
-            <CheckEntityExists entity_id="{entity_id}" />
+            <CheckEntityExists vehicle_id="{vehicle_id}" />
 
             <!-- 移动到点A -->
             <LuaStatefulMove lua_node_name="LuaStatefulMoveTo"
@@ -103,7 +103,7 @@
     <!-- ============================================ -->
     <BehaviorTree ID="LuaStatefulConditionalExample">
         <Sequence name="conditional_sequence">
-            <CheckEntityExists entity_id="{entity_id}" />
+            <CheckEntityExists vehicle_id="{vehicle_id}" />
 
             <!-- 如果距离目标较远，使用快速移动 -->
             <Fallback name="move_fallback">

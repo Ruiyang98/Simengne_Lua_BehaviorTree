@@ -33,7 +33,7 @@
             <LuaCondition lua_node_name="LuaHasEntities" />
 
             <!-- C++ 动作节点 -->
-            <CheckEntityExists entity_id="{entity_id}" />
+            <CheckEntityExists vehicle_id="{vehicle_id}" />
 
             <!-- Lua 动作节点 -->
             <LuaAction lua_node_name="LuaCheckHealth" />

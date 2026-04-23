@@ -11,7 +11,7 @@ MockSimController::MockSimController()
     , autoUpdate_(false)
     , running_(false)
     , verbose_(true)
-    , nextEntityId_(1) {
+    , nextVehicleId_(1) {
 }
 
 MockSimController::~MockSimController() {
@@ -215,71 +215,75 @@ void MockSimController::notifyReset() {
     }
 }
 
-std::string MockSimController::generateEntityId() {
-    uint64_t id = nextEntityId_.fetch_add(1);
-    return "entity_" + std::to_string(id);
+VehicleID MockSimController::generateVehicleId() {
+    VehicleID id;
+    id.address.site = 0;
+    id.address.host = 0;
+    id.vehicle = nextVehicleId_.fetch_add(1);
+    return id;
 }
 
-std::string MockSimController::addEntity(const std::string& type, double x, double y, double z) {
-    std::string entityId = generateEntityId();
-    entities_[entityId] = Entity(entityId, type, x, y, z);
-    
+VehicleID MockSimController::addEntity(const std::string& type, double x, double y, double z) {
+    VehicleID vehicleId = generateVehicleId();
+    entities_[vehicleId] = Entity(vehicleId, type, x, y, z);
+
     if (verbose_) {
-        std::cout << "[MockSim] Entity added: " << entityId << " (type: " << type << ") at (" 
+        std::cout << "[MockSim] Entity added: vehicle=" << vehicleId.vehicle
+                  << " (type: " << type << ") at ("
                   << x << ", " << y << ", " << z << ")" << std::endl;
     }
-    
-    return entityId;
+
+    return vehicleId;
 }
 
-bool MockSimController::removeEntity(const std::string& entityId) {
+bool MockSimController::removeEntity(const VehicleID& entityId) {
     auto it = entities_.find(entityId);
     if (it == entities_.end()) {
         if (verbose_) {
-            std::cout << "[MockSim] Failed to remove entity: " << entityId << " (not found)" << std::endl;
+            std::cout << "[MockSim] Failed to remove entity: vehicle=" << entityId.vehicle << " (not found)" << std::endl;
         }
         return false;
     }
-    
+
     entities_.erase(it);
-    
+
     if (verbose_) {
-        std::cout << "[MockSim] Entity removed: " << entityId << std::endl;
+        std::cout << "[MockSim] Entity removed: vehicle=" << entityId.vehicle << std::endl;
     }
-    
+
     return true;
 }
 
-bool MockSimController::moveEntity(const std::string& entityId, double x, double y, double z) {
+bool MockSimController::moveEntity(const VehicleID& entityId, double x, double y, double z) {
     auto it = entities_.find(entityId);
     if (it == entities_.end()) {
         if (verbose_) {
-            std::cout << "[MockSim] Failed to move entity: " << entityId << " (not found)" << std::endl;
+            std::cout << "[MockSim] Failed to move entity: vehicle=" << entityId.vehicle << " (not found)" << std::endl;
         }
         return false;
     }
-    
+
     it->second.x = x;
     it->second.y = y;
     it->second.z = z;
-    
+
     if (verbose_) {
-        std::cout << "[MockSim] Entity moved: " << entityId << " to (" << x << ", " << y << ", " << z << ")" << std::endl;
+        std::cout << "[MockSim] Entity moved: vehicle=" << entityId.vehicle << " to (" << x << ", " << y << ", " << z << ")" << std::endl;
     }
-    
+
     return true;
 }
 
-bool MockSimController::getEntityPosition(const std::string& entityId, double& x, double& y, double& z) {
+bool MockSimController::getEntityPosition(const VehicleID& entityId, double& x, double& y, double& z) {
     auto it = entities_.find(entityId);
     if (it == entities_.end()) {
         return false;
     }
-    
+
     x = it->second.x;
     y = it->second.y;
     z = it->second.z;
-    
+
     return true;
 }
 
@@ -298,15 +302,15 @@ size_t MockSimController::getEntityCount() {
 	return entities_.size();
 }
 
-bool MockSimController::setEntityMoveDirection(const std::string& entityId, double dx, double dy, double dz) {
+bool MockSimController::setEntityMoveDirection(const VehicleID& entityId, double dx, double dy, double dz) {
     auto it = entities_.find(entityId);
     if (it == entities_.end()) {
         if (verbose_) {
-            std::cout << "[MockSim] Failed to set move direction for entity: " << entityId << " (not found)" << std::endl;
+            std::cout << "[MockSim] Failed to set move direction for entity: vehicle=" << entityId.vehicle << " (not found)" << std::endl;
         }
         return false;
     }
-    
+
     // Normalize direction vector
     double length = std::sqrt(dx * dx + dy * dy + dz * dz);
     if (length > 0) {
@@ -314,7 +318,7 @@ bool MockSimController::setEntityMoveDirection(const std::string& entityId, doub
         dy /= length;
         dz /= length;
     }
-    
+
     // Store direction in the entity (using a simple approach - in real implementation
     // this would be stored separately and applied during simulation update)
     // For now, we just move the entity immediately by a small amount in that direction
@@ -322,24 +326,24 @@ bool MockSimController::setEntityMoveDirection(const std::string& entityId, doub
     it->second.x += dx * moveSpeed;
     it->second.y += dy * moveSpeed;
     it->second.z += dz * moveSpeed;
-    
+
     if (verbose_) {
-        std::cout << "[MockSim] Entity " << entityId << " moved in direction (" << dx << ", " << dy << ", " << dz << ")" << std::endl;
+        std::cout << "[MockSim] Entity vehicle=" << entityId.vehicle << " moved in direction (" << dx << ", " << dy << ", " << dz << ")" << std::endl;
     }
-    
+
     return true;
 }
 
-double MockSimController::getEntityDistance(const std::string& entityId, double x, double y, double z) {
+double MockSimController::getEntityDistance(const VehicleID& entityId, double x, double y, double z) {
     auto it = entities_.find(entityId);
     if (it == entities_.end()) {
         return -1.0;
     }
-    
+
     double dx = it->second.x - x;
     double dy = it->second.y - y;
     double dz = it->second.z - z;
-    
+
     return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 

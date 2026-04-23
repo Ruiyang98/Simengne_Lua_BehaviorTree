@@ -115,6 +115,18 @@ void LuaSimBinding::registerFunctions() {
 }
 
 void LuaSimBinding::registerSimAPI() {
+    // Register SimAddress type
+    luaState_->new_usertype<simulation::SimAddress>("SimAddress",
+        "site", &simulation::SimAddress::site,
+        "host", &simulation::SimAddress::host
+    );
+
+    // Register VehicleID type
+    luaState_->new_usertype<simulation::VehicleID>("VehicleID",
+        "address", &simulation::VehicleID::address,
+        "vehicle", &simulation::VehicleID::vehicle
+    );
+
     // Create sim table
     sol::table simTable = luaState_->create_named_table("sim");
 
@@ -179,34 +191,34 @@ void LuaSimBinding::registerSimAPI() {
     });
 
     // Entity management
-    simTable.set_function("add_entity", [this](const std::string& type, double x, double y, double z) -> std::string {
+    simTable.set_function("add_entity", [this](const std::string& type, double x, double y, double z) -> simulation::VehicleID {
         if (simInterface_) {
             return simInterface_->addEntity(type, x, y, z);
         }
-        return "";
+        return simulation::VehicleID{};
     });
 
-    simTable.set_function("remove_entity", [this](const std::string& entityId) -> bool {
+    simTable.set_function("remove_entity", [this](const simulation::VehicleID& vehicleId) -> bool {
         if (simInterface_) {
-            return simInterface_->removeEntity(entityId);
+            return simInterface_->removeEntity(vehicleId);
         }
         return false;
     });
 
-    simTable.set_function("move_entity", [this](const std::string& entityId, double x, double y, double z) -> bool {
+    simTable.set_function("move_entity", [this](const simulation::VehicleID& vehicleId, double x, double y, double z) -> bool {
         if (simInterface_) {
-            return simInterface_->moveEntity(entityId, x, y, z);
+            return simInterface_->moveEntity(vehicleId, x, y, z);
         }
         return false;
     });
 
-    simTable.set_function("get_entity_position", [this](const std::string& entityId) -> sol::optional<sol::table> {
+    simTable.set_function("get_entity_position", [this](const simulation::VehicleID& vehicleId) -> sol::optional<sol::table> {
         if (!simInterface_) {
             return sol::nullopt;
         }
-        
+
         double x, y, z;
-        if (simInterface_->getEntityPosition(entityId, x, y, z)) {
+        if (simInterface_->getEntityPosition(vehicleId, x, y, z)) {
             sol::table pos = luaState_->create_table();
             pos["x"] = x;
             pos["y"] = y;
@@ -218,7 +230,7 @@ void LuaSimBinding::registerSimAPI() {
 
     simTable.set_function("get_all_entities", [this]() -> sol::table {
         sol::table entities = luaState_->create_table();
-        
+
         if (simInterface_) {
             auto entityList = simInterface_->getAllEntities();
             for (size_t i = 0; i < entityList.size(); ++i) {
@@ -231,7 +243,7 @@ void LuaSimBinding::registerSimAPI() {
                 entities[i + 1] = entity;  // Lua arrays are 1-indexed
             }
         }
-        
+
         return entities;
     });
 
@@ -243,17 +255,17 @@ void LuaSimBinding::registerSimAPI() {
     });
 
     // Set entity move direction
-    simTable.set_function("set_entity_move_direction", [this](const std::string& entityId, double dx, double dy, double dz) -> bool {
+    simTable.set_function("set_entity_move_direction", [this](const simulation::VehicleID& vehicleId, double dx, double dy, double dz) -> bool {
         if (simInterface_) {
-            return simInterface_->setEntityMoveDirection(entityId, dx, dy, dz);
+            return simInterface_->setEntityMoveDirection(vehicleId, dx, dy, dz);
         }
         return false;
     });
 
     // Get entity distance to target point
-    simTable.set_function("get_entity_distance", [this](const std::string& entityId, double x, double y, double z) -> double {
+    simTable.set_function("get_entity_distance", [this](const simulation::VehicleID& vehicleId, double x, double y, double z) -> double {
         if (simInterface_) {
-            return simInterface_->getEntityDistance(entityId, x, y, z);
+            return simInterface_->getEntityDistance(vehicleId, x, y, z);
         }
         return -1.0;
     });

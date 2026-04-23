@@ -11,35 +11,35 @@ CheckEntityExists::CheckEntityExists(const std::string& name, const BT::NodeConf
 
 BT::PortsList CheckEntityExists::providedPorts() {
     return {
-        BT::InputPort<std::string>("entity_id", "Entity ID to check")
+        BT::InputPort<simulation::VehicleID>("vehicle_id", "Vehicle ID to check")
     };
 }
 
 BT::NodeStatus CheckEntityExists::tick() {
     // Get input parameters
-    BT::Optional<std::string> entity_id = getInput<std::string>("entity_id");
-    
+    BT::Optional<simulation::VehicleID> vehicle_id = getInput<simulation::VehicleID>("vehicle_id");
+
     // Check required parameters
-    if (!entity_id) {
-        std::cerr << "[CheckEntityExists] Missing required input: entity_id" << std::endl;
+    if (!vehicle_id) {
+        std::cerr << "[CheckEntityExists] Missing required input: vehicle_id" << std::endl;
         return BT::NodeStatus::FAILURE;
     }
-    
+
     // Get simulation controller
     simulation::SimControlInterface* sim = getSimController();
     if (!sim) {
         std::cerr << "[CheckEntityExists] SimController not available" << std::endl;
         return BT::NodeStatus::FAILURE;
     }
-    
+
     // Check if entity exists
     double x, y, z;
-    if (sim->getEntityPosition(entity_id.value(), x, y, z)) {
-        std::cout << "[CheckEntityExists] Entity " << entity_id.value() << " exists at ("
+    if (sim->getEntityPosition(vehicle_id.value(), x, y, z)) {
+        std::cout << "[CheckEntityExists] Entity vehicle=" << vehicle_id.value().vehicle << " exists at ("
                   << x << ", " << y << ", " << z << ")" << std::endl;
         return BT::NodeStatus::SUCCESS;
     } else {
-        std::cout << "[CheckEntityExists] Entity " << entity_id.value() << " does not exist" << std::endl;
+        std::cout << "[CheckEntityExists] Entity vehicle=" << vehicle_id.value().vehicle << " does not exist" << std::endl;
         return BT::NodeStatus::FAILURE;
     }
 }

@@ -5,7 +5,7 @@
     <BehaviorTree ID="AsyncSquarePath">
         <Sequence name="async_square_sequence">
             <!-- 检查实体 -->
-            <CheckEntityExists entity_id="{entity_id}" />
+            <CheckEntityExists vehicle_id="{vehicle_id}" />
 
             <!-- 正方形路径：使用 AsyncMoveToPoint 实现平滑移动 -->
             <!-- 从当前位置移动到 (10,0) -->
@@ -25,7 +25,7 @@
     <!-- 异步大正方形路径 -->
     <BehaviorTree ID="AsyncLargeSquarePath">
         <Sequence name="async_large_square_sequence">
-            <CheckEntityExists entity_id="{entity_id}" />
+            <CheckEntityExists vehicle_id="{vehicle_id}" />
 
             <!-- 大正方形路径：使用更快的速度 -->
             <AsyncMoveToPoint x="50" y="0" z="0" speed="5.0" threshold="1.0" />
@@ -39,7 +39,7 @@
     <BehaviorTree ID="AsyncPatrol">
         <Repeat num_cycles="3" name="patrol_loop">
             <Sequence name="patrol_sequence">
-                <CheckEntityExists entity_id="{entity_id}" />
+                <CheckEntityExists vehicle_id="{vehicle_id}" />
 
                 <!-- 巡逻点 A -->
                 <AsyncMoveToPoint x="20" y="0" z="0" speed="3.0" threshold="0.5" />

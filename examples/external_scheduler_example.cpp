@@ -49,21 +49,22 @@ void simpleExternalSchedulerExample() {
     }
 
     // 4. Create test entity
-    std::string entityId = simController.addEntity("npc", 0, 0, 0);
-    std::cout << "Created entity: " << entityId << std::endl;
+    VehicleID entityId = simController.addEntity("npc", 0, 0, 0);
+    std::cout << "Created entity: vehicle=" << entityId.vehicle << std::endl;
 
     // 5. Get scheduler instance
     BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
 
     // 6. Create blackboard and set entity ID
     auto blackboard = BT::Blackboard::create();
-    blackboard->set("entity_id", entityId);
+    blackboard->set("vehicle_id", entityId);
 
     // 7. Create behavior tree using factory
     BT::Tree tree = executor.getFactory().createTree("AsyncSquarePath", blackboard);
 
     // 8. Register entity with scheduler, set tick interval to 500ms
-    if (!scheduler.registerEntityWithTreeAndInterval(entityId, "AsyncSquarePath", std::move(tree), 500, blackboard)) {
+    std::string entityKey = std::to_string(entityId.vehicle);
+    if (!scheduler.registerEntityWithTreeAndInterval(entityKey, "AsyncSquarePath", std::move(tree), 500, blackboard)) {
         std::cerr << "Failed to register entity with scheduler" << std::endl;
         return;
     }
@@ -82,9 +83,9 @@ void simpleExternalSchedulerExample() {
         scheduler.tickAll();
 
         // Get and print current status
-        auto info = scheduler.getEntityInfo(entityId);
+        auto info = scheduler.getEntityInfo(entityKey);
         std::cout << "[Tick " << tickCount << "] "
-                  << "Entity: " << entityId
+                  << "Entity: vehicle=" << entityId.vehicle
                   << " | Status: " << statusToString(info->lastStatus)
                   << " | Running: " << (info->isRunning ? "Yes" : "No")
                   << " | TickCount: " << info->tickCount
@@ -106,7 +107,7 @@ void simpleExternalSchedulerExample() {
     }
 
     // 10. Cleanup
-    scheduler.unregisterEntity(entityId);
+    scheduler.unregisterEntity(entityKey);
     std::cout << std::endl;
     std::cout << "Example completed!" << std::endl;
 }
@@ -130,21 +131,24 @@ void multiEntitySchedulerExample() {
     BehaviorTreeScheduler& scheduler = BehaviorTreeScheduler::getInstance();
 
     // 2. Create multiple entities
-    std::vector<std::string> entityIds;
+    std::vector<VehicleID> entityIds;
+    std::vector<std::string> entityKeys;
     for (int i = 0; i < 3; ++i) {
-        std::string entityId = simController.addEntity("npc_" + std::to_string(i), i * 5, 0, 0);
+        VehicleID entityId = simController.addEntity("npc_" + std::to_string(i), i * 5, 0, 0);
         entityIds.push_back(entityId);
+        std::string entityKey = std::to_string(entityId.vehicle);
+        entityKeys.push_back(entityKey);
 
         auto blackboard = BT::Blackboard::create();
-        blackboard->set("entity_id", entityId);
+        blackboard->set("vehicle_id", entityId);
 
         BT::Tree tree = executor.getFactory().createTree("AsyncSquarePath", blackboard);
 
         // Each entity can have different tick interval
         int interval = 500 + i * 100;  // 500ms, 600ms, 700ms
-        scheduler.registerEntityWithTreeAndInterval(entityId, "AsyncSquarePath", std::move(tree), interval, blackboard);
+        scheduler.registerEntityWithTreeAndInterval(entityKey, "AsyncSquarePath", std::move(tree), interval, blackboard);
 
-        std::cout << "Created entity: " << entityId << " with tick interval: " << interval << "ms" << std::endl;
+        std::cout << "Created entity: vehicle=" << entityId.vehicle << " with tick interval: " << interval << "ms" << std::endl;
     }
 
     std::cout << std::endl;
@@ -163,9 +167,9 @@ void multiEntitySchedulerExample() {
         // Print all entity statuses
         std::cout << "[Tick " << tickCount << "] ";
         bool allCompleted = true;
-        for (const auto& entityId : entityIds) {
-            auto status = scheduler.getEntityStatus(entityId);
-            std::cout << entityId << ":" << statusToString(status) << " ";
+        for (size_t i = 0; i < entityKeys.size(); ++i) {
+            auto status = scheduler.getEntityStatus(entityKeys[i]);
+            std::cout << "vehicle=" << entityIds[i].vehicle << ":" << statusToString(status) << " ";
             if (status == BT::NodeStatus::RUNNING) {
                 allCompleted = false;
             }
@@ -187,8 +191,8 @@ void multiEntitySchedulerExample() {
     }
 
     // 4. Cleanup
-    for (const auto& entityId : entityIds) {
-        scheduler.unregisterEntity(entityId);
+    for (const auto& entityKey : entityKeys) {
+        scheduler.unregisterEntity(entityKey);
     }
     std::cout << std::endl;
     std::cout << "Multi-entity example completed!" << std::endl;
@@ -223,19 +227,20 @@ public:
 
     std::string spawnEntityAndStartBT(const std::string& treeName, double x, double y, double z) {
         // Create entity
-        std::string entityId = simController_->addEntity("npc", x, y, z);
+        VehicleID entityId = simController_->addEntity("npc", x, y, z);
+        std::string entityKey = std::to_string(entityId.vehicle);
 
         // Create blackboard
         auto blackboard = BT::Blackboard::create();
-        blackboard->set("entity_id", entityId);
+        blackboard->set("vehicle_id", entityId);
 
         // Create and register behavior tree
         BT::Tree tree = btExecutor_->getFactory().createTree(treeName, blackboard);
         BehaviorTreeScheduler::getInstance().registerEntityWithTreeAndInterval(
-            entityId, treeName, std::move(tree), 500, blackboard);
+            entityKey, treeName, std::move(tree), 500, blackboard);
 
-        std::cout << "[GameEngine] Spawned entity " << entityId << " with behavior tree " << treeName << std::endl;
-        return entityId;
+        std::cout << "[GameEngine] Spawned entity vehicle=" << entityId.vehicle << " with behavior tree " << treeName << std::endl;
+        return entityKey;
     }
 
     void run() {

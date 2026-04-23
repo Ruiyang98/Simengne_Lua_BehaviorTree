@@ -80,59 +80,70 @@ void printUsage() {
 }
 
 // Execute behavior tree from command
-bool executeBehaviorTree(const std::string& xmlFile, const std::string& treeName, const std::string& entityId = "") {
+bool executeBehaviorTree(const std::string& xmlFile, const std::string& treeName, const std::string& entityIdStr = "") {
     if (!g_btExecutor) {
         std::cerr << "ERROR: Behavior tree executor not initialized" << std::endl;
         return false;
     }
-    
+
     std::cout << "----------------------------------------" << std::endl;
-    
+
     // Load behavior tree XML file
     if (!g_btExecutor->loadFromFile(xmlFile)) {
         std::cerr << "ERROR: Failed to load behavior tree: " << g_btExecutor->getLastError() << std::endl;
         return false;
     }
-    
+
     std::cout << "OK: Behavior tree loaded from: " << xmlFile << std::endl;
-    
+
     // Create blackboard and set parameters
     auto blackboard = BT::Blackboard::create();
-    
+
     // Use specified entity ID or find/create one
-    if (!entityId.empty()) {
-        // Verify the entity exists
-        double x, y, z;
-        if (g_simController->getEntityPosition(entityId, x, y, z)) {
-            blackboard->set(BlackboardKeys::ENTITY_ID, entityId);
-            std::cout << "INFO: Using specified entity: " << entityId << std::endl;
-        } else {
-            std::cerr << "ERROR: Entity not found: " << entityId << std::endl;
+    VehicleID vehicleId;
+    if (!entityIdStr.empty()) {
+        // Parse entity ID from string (format: "vehicle_<number>")
+        // For now, we search for matching vehicle number
+        int targetVehicle = std::stoi(entityIdStr);
+        auto entities = g_simController->getAllEntities();
+        bool found = false;
+        for (const auto& entity : entities) {
+            if (entity.id.vehicle == targetVehicle) {
+                vehicleId = entity.id;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            std::cerr << "ERROR: Entity not found: " << entityIdStr << std::endl;
             return false;
         }
+        blackboard->set(BlackboardKeys::VEHICLE_ID, vehicleId);
+        std::cout << "INFO: Using specified entity: vehicle=" << vehicleId.vehicle << std::endl;
     } else {
         // Try to get an existing entity
         auto entities = g_simController->getAllEntities();
         if (!entities.empty()) {
-            blackboard->set(BlackboardKeys::ENTITY_ID, entities[0].id);
-            std::cout << "INFO: Using existing entity: " << entities[0].id << std::endl;
+            vehicleId = entities[0].id;
+            blackboard->set(BlackboardKeys::VEHICLE_ID, vehicleId);
+            std::cout << "INFO: Using existing entity: vehicle=" << vehicleId.vehicle << std::endl;
         } else {
             // Create a test entity
-            std::string newId = g_simController->addEntity("npc", 0.0, 0.0, 0.0);
-            blackboard->set(BlackboardKeys::ENTITY_ID, newId);
-            std::cout << "INFO: Created test entity: " << newId << std::endl;
+            vehicleId = g_simController->addEntity("npc", 0.0, 0.0, 0.0);
+            blackboard->set(BlackboardKeys::VEHICLE_ID, vehicleId);
+            std::cout << "INFO: Created test entity: vehicle=" << vehicleId.vehicle << std::endl;
         }
     }
-    
+
     std::cout << std::endl;
     std::cout << "Executing behavior tree: " << treeName << std::endl;
     std::cout << "----------------------------------------" << std::endl;
-    
+
     // Execute behavior tree
     BT::NodeStatus status = g_btExecutor->execute(treeName, blackboard);
-    
+
     std::cout << "----------------------------------------" << std::endl;
-    
+
     if (status == BT::NodeStatus::SUCCESS) {
         std::cout << "OK: Behavior tree executed successfully" << std::endl;
         return true;
@@ -147,7 +158,7 @@ void listEntities() {
     auto entities = g_simController->getAllEntities();
     std::cout << "Entities (" << entities.size() << "):" << std::endl;
     for (const auto& entity : entities) {
-        std::cout << "  - " << entity.id << " (" << entity.type << ") at ("
+        std::cout << "  - vehicle=" << entity.id.vehicle << " (" << entity.type << ") at ("
                   << entity.x << ", " << entity.y << ", " << entity.z << ")" << std::endl;
     }
 }
@@ -158,14 +169,14 @@ void addEntity(const std::vector<std::string>& args) {
         std::cerr << "Usage: entity add <type> <x> <y>" << std::endl;
         return;
     }
-    
+
     std::string type = args[2];
     double x = std::stod(args[3]);
     double y = std::stod(args[4]);
     double z = (args.size() > 5) ? std::stod(args[5]) : 0.0;
-    
-    std::string id = g_simController->addEntity(type, x, y, z);
-    std::cout << "Created entity: " << id << " at (" << x << ", " << y << ", " << z << ")" << std::endl;
+
+    VehicleID id = g_simController->addEntity(type, x, y, z);
+    std::cout << "Created entity: vehicle=" << id.vehicle << " at (" << x << ", " << y << ", " << z << ")" << std::endl;
 }
 
 // List available behavior tree XML files
@@ -245,7 +256,7 @@ void handleBtCommand(const std::vector<std::string>& args) {
 
 // Execute behavior tree asynchronously from command
 // Usage: bt-async <xml_file> <entity_id> [tree_name]
-bool executeAsyncBehaviorTree(const std::string& xmlFile, const std::string& entityId,
+bool executeAsyncBehaviorTree(const std::string& xmlFile, const std::string& entityIdStr,
                                const std::string& treeName) {
     if (!g_btExecutor) {
         std::cerr << "ERROR: Behavior tree executor not initialized" << std::endl;
@@ -265,26 +276,36 @@ bool executeAsyncBehaviorTree(const std::string& xmlFile, const std::string& ent
     // Create blackboard and set parameters
     auto blackboard = BT::Blackboard::create();
 
-    // Verify the entity exists
-    double x, y, z;
-    if (g_simController->getEntityPosition(entityId, x, y, z)) {
-        blackboard->set(BlackboardKeys::ENTITY_ID, entityId);
-        std::cout << "INFO: Using specified entity: " << entityId << std::endl;
-    } else {
-        std::cerr << "ERROR: Entity not found: " << entityId << std::endl;
+    // Parse entity ID from string and verify the entity exists
+    int targetVehicle = std::stoi(entityIdStr);
+    auto entities = g_simController->getAllEntities();
+    VehicleID vehicleId;
+    bool found = false;
+    for (const auto& entity : entities) {
+        if (entity.id.vehicle == targetVehicle) {
+            vehicleId = entity.id;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        std::cerr << "ERROR: Entity not found: " << entityIdStr << std::endl;
         return false;
     }
+
+    blackboard->set(BlackboardKeys::VEHICLE_ID, vehicleId);
+    std::cout << "INFO: Using specified entity: vehicle=" << vehicleId.vehicle << std::endl;
 
     std::cout << std::endl;
     std::cout << "Starting async behavior tree: " << treeName << std::endl;
     std::cout << "Tick interval: 500ms (fixed)" << std::endl;
     std::cout << "----------------------------------------" << std::endl;
 
-    // Execute behavior tree asynchronously
-    bool success = g_btExecutor->executeAsync(entityId, treeName, blackboard);
+    // Execute behavior tree asynchronously (use vehicle number as key)
+    bool success = g_btExecutor->executeAsync(entityIdStr, treeName, blackboard);
 
     if (success) {
-        std::cout << "OK: Async behavior tree started for entity: " << entityId << std::endl;
+        std::cout << "OK: Async behavior tree started for entity: vehicle=" << vehicleId.vehicle << std::endl;
         return true;
     } else {
         std::cerr << "ERROR: Failed to start async behavior tree: " << g_btExecutor->getLastError() << std::endl;

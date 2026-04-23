@@ -3,6 +3,7 @@
 
 #include <behaviortree_cpp_v3/condition_node.h>
 #include <behaviortree_cpp_v3/behavior_tree.h>
+#include "simulation/SimControlInterface.h"
 
 namespace behaviortree {
 

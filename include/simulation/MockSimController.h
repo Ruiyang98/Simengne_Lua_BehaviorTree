@@ -47,16 +47,16 @@ public:
     void setVerbose(bool verbose);
 
     // Entity management implementation
-    std::string addEntity(const std::string& type, double x, double y, double z);
-    bool removeEntity(const std::string& entityId);
-    bool moveEntity(const std::string& entityId, double x, double y, double z);
-    bool getEntityPosition(const std::string& entityId, double& x, double& y, double& z);
+    VehicleID addEntity(const std::string& type, double x, double y, double z);
+    bool removeEntity(const VehicleID& entityId);
+    bool moveEntity(const VehicleID& entityId, double x, double y, double z);
+    bool getEntityPosition(const VehicleID& entityId, double& x, double& y, double& z);
     std::vector<Entity> getAllEntities();
     size_t getEntityCount();
 
     // New movement interface
-    bool setEntityMoveDirection(const std::string& entityId, double dx, double dy, double dz);
-    double getEntityDistance(const std::string& entityId, double x, double y, double z);
+    bool setEntityMoveDirection(const VehicleID& entityId, double dx, double dy, double dz);
+    double getEntityDistance(const VehicleID& entityId, double x, double y, double z);
 
 private:
     void runSimulationLoop();
@@ -65,7 +65,7 @@ private:
     void notifyResume();
     void notifyStop();
     void notifyReset();
-    std::string generateEntityId();
+    VehicleID generateVehicleId();
 
     // State
     volatile int state_;
@@ -89,8 +89,8 @@ private:
     bool verbose_;
 
     // Entity storage
-    std::map<std::string, Entity> entities_;
-    std::atomic<uint64_t> nextEntityId_;
+    std::map<VehicleID, Entity> entities_;
+    std::atomic<int> nextVehicleId_;
 };
 
 } // namespace simulation

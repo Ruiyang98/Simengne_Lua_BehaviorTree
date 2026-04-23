@@ -3,6 +3,7 @@
 
 #include <behaviortree_cpp_v3/action_node.h>
 #include <behaviortree_cpp_v3/behavior_tree.h>
+#include "simulation/SimControlInterface.h"
 #include <string>
 
 namespace behaviortree {
@@ -37,8 +38,8 @@ private:
     // Arrival threshold
     double arrivalThreshold_;
 
-    // Entity ID
-    std::string entityId_;
+    // Vehicle ID
+    simulation::VehicleID vehicleId_;
 
     // Check if entity has arrived at target
     bool hasArrived(double currentX, double currentY, double currentZ) const;

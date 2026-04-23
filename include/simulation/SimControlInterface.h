@@ -17,16 +17,45 @@ enum SimState {
 // Event callback type
 typedef std::function<void()> SimEventCallback;
 
+struct SimAddress {
+    int site;
+    int host;
+};
+
+
+struct VehicleID {
+    SimAddress address;
+    int vehicle;
+};
+
+// Comparison operators for VehicleID
+inline bool operator==(const VehicleID& lhs, const VehicleID& rhs) {
+    return lhs.address.site == rhs.address.site &&
+           lhs.address.host == rhs.address.host &&
+           lhs.vehicle == rhs.vehicle;
+}
+
+inline bool operator<(const VehicleID& lhs, const VehicleID& rhs) {
+    if (lhs.address.site != rhs.address.site) return lhs.address.site < rhs.address.site;
+    if (lhs.address.host != rhs.address.host) return lhs.address.host < rhs.address.host;
+    return lhs.vehicle < rhs.vehicle;
+}
+
+inline bool operator!=(const VehicleID& lhs, const VehicleID& rhs) {
+    return !(lhs == rhs);
+}
+
+
 // Entity structure for simulation entities
 struct Entity {
-    std::string id;
+    VehicleID id;
     std::string type;
     double x;
     double y;
     double z;
     
     Entity() : x(0.0), y(0.0), z(0.0) {}
-    Entity(const std::string& entityId, const std::string& entityType, double px, double py, double pz)
+    Entity(const VehicleID& entityId, const std::string& entityType, double px, double py, double pz)
         : id(entityId), type(entityType), x(px), y(py), z(pz) {}
 };
 
@@ -61,18 +90,18 @@ public:
     virtual void setOnResetCallback(SimEventCallback callback) = 0;
 
     // Entity management
-    virtual std::string addEntity(const std::string& type, double x, double y, double z) = 0;
-    virtual bool removeEntity(const std::string& entityId) = 0;
-    virtual bool moveEntity(const std::string& entityId, double x, double y, double z) = 0;
-    virtual bool getEntityPosition(const std::string& entityId, double& x, double& y, double& z) = 0;
+    virtual VehicleID addEntity(const std::string& type, double x, double y, double z) = 0;
+    virtual bool removeEntity(const VehicleID& entityId) = 0;
+    virtual bool moveEntity(const VehicleID& entityId, double x, double y, double z) = 0;
+    virtual bool getEntityPosition(const VehicleID& entityId, double& x, double& y, double& z) = 0;
     virtual std::vector<Entity> getAllEntities() = 0;
     virtual size_t getEntityCount() = 0;
 
     // Set entity movement direction
-    virtual bool setEntityMoveDirection(const std::string& entityId, double dx, double dy, double dz) = 0;
-    
+    virtual bool setEntityMoveDirection(const VehicleID& entityId, double dx, double dy, double dz) = 0;
+
     // Get distance from entity to target point
-    virtual double getEntityDistance(const std::string& entityId, double x, double y, double z) = 0;
+    virtual double getEntityDistance(const VehicleID& entityId, double x, double y, double z) = 0;
 
     // Utility
     static std::string stateToString(SimState state);

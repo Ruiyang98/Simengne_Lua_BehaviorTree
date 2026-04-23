@@ -39,7 +39,7 @@ BT::NodeStatus AsyncMoveToPoint::onStart() {
     targetZ_ = z.value();
     arrivalThreshold_ = threshold.value();
 
-    // Get entity ID from blackboard
+    // Get vehicle ID from blackboard
     auto blackboard = config().blackboard;
     if (!blackboard) {
         std::cerr << "[AsyncMoveToPoint] No blackboard available" << std::endl;
@@ -47,9 +47,9 @@ BT::NodeStatus AsyncMoveToPoint::onStart() {
     }
 
     try {
-        entityId_ = blackboard->get<std::string>(BlackboardKeys::ENTITY_ID);
+        vehicleId_ = blackboard->get<simulation::VehicleID>(BlackboardKeys::VEHICLE_ID);
     } catch (const std::exception& e) {
-        std::cerr << "[AsyncMoveToPoint] Failed to get entity_id from blackboard: " << e.what() << std::endl;
+        std::cerr << "[AsyncMoveToPoint] Failed to get vehicle_id from blackboard: " << e.what() << std::endl;
         return BT::NodeStatus::FAILURE;
     }
 
@@ -62,15 +62,15 @@ BT::NodeStatus AsyncMoveToPoint::onStart() {
 
     // Get current position
     double currentX, currentY, currentZ;
-    if (!simController->getEntityPosition(entityId_, currentX, currentY, currentZ)) {
-        std::cerr << "[AsyncMoveToPoint] Entity not found: " << entityId_ << std::endl;
+    if (!simController->getEntityPosition(vehicleId_, currentX, currentY, currentZ)) {
+        std::cerr << "[AsyncMoveToPoint] Entity not found: vehicle=" << vehicleId_.vehicle << std::endl;
         return BT::NodeStatus::FAILURE;
     }
 
     // Use getEntityDistance to check if already at destination
-    double distance = simController->getEntityDistance(entityId_, targetX_, targetY_, targetZ_);
+    double distance = simController->getEntityDistance(vehicleId_, targetX_, targetY_, targetZ_);
 
-    std::cout << "[AsyncMoveToPoint] Starting move for entity " << entityId_
+    std::cout << "[AsyncMoveToPoint] Starting move for entity vehicle=" << vehicleId_.vehicle
               << " from (" << currentX << ", " << currentY << ", " << currentZ << ")"
               << " to (" << targetX_ << ", " << targetY_ << ", " << targetZ_ << ")"
               << " distance: " << distance << std::endl;
@@ -87,8 +87,8 @@ BT::NodeStatus AsyncMoveToPoint::onStart() {
     double dz = targetZ_ - currentZ;
 
     // Set movement direction
-    if (!simController->setEntityMoveDirection(entityId_, dx, dy, dz)) {
-        std::cerr << "[AsyncMoveToPoint] Failed to set move direction for entity: " << entityId_ << std::endl;
+    if (!simController->setEntityMoveDirection(vehicleId_, dx, dy, dz)) {
+        std::cerr << "[AsyncMoveToPoint] Failed to set move direction for entity: vehicle=" << vehicleId_.vehicle << std::endl;
         return BT::NodeStatus::FAILURE;
     }
 
@@ -103,15 +103,15 @@ BT::NodeStatus AsyncMoveToPoint::onRunning() {
     }
 
     // Use getEntityDistance to check if arrived
-    double distance = simController->getEntityDistance(entityId_, targetX_, targetY_, targetZ_);
+    double distance = simController->getEntityDistance(vehicleId_, targetX_, targetY_, targetZ_);
 
     if (distance <= arrivalThreshold_) {
-        std::cout << "[AsyncMoveToPoint] Entity " << entityId_ << " arrived at destination ("
+        std::cout << "[AsyncMoveToPoint] Entity vehicle=" << vehicleId_.vehicle << " arrived at destination ("
                   << targetX_ << ", " << targetY_ << ", " << targetZ_ << ")" << std::endl;
-        
+
         // Stop movement
-        simController->setEntityMoveDirection(entityId_, 0, 0, 0);
-        
+        simController->setEntityMoveDirection(vehicleId_, 0, 0, 0);
+
         return BT::NodeStatus::SUCCESS;
     }
 
@@ -120,12 +120,12 @@ BT::NodeStatus AsyncMoveToPoint::onRunning() {
 }
 
 void AsyncMoveToPoint::onHalted() {
-    std::cout << "[AsyncMoveToPoint] Movement halted for entity " << entityId_ << std::endl;
-    
+    std::cout << "[AsyncMoveToPoint] Movement halted for entity vehicle=" << vehicleId_.vehicle << std::endl;
+
     // Stop movement
     simulation::SimControlInterface* simController = getSimController();
     if (simController) {
-        simController->setEntityMoveDirection(entityId_, 0, 0, 0);
+        simController->setEntityMoveDirection(vehicleId_, 0, 0, 0);
     }
 }
 
