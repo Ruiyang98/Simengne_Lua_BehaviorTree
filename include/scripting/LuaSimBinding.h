@@ -14,12 +14,19 @@ namespace scripting {
 // Forward declaration
 class LuaBehaviorTreeBridge;
 
+// LuaSimBinding singleton class - global unique Lua state manager
 class LuaSimBinding {
 public:
-    LuaSimBinding();
-    ~LuaSimBinding();
+    // Get singleton instance
+    static LuaSimBinding& getInstance();
+    
+    // Disable copy and assignment
+    LuaSimBinding(const LuaSimBinding&) = delete;
+    LuaSimBinding& operator=(const LuaSimBinding&) = delete;
 
-    bool initialize();
+    // Initialize (only needs to be called once)
+    bool initialize(BT::BehaviorTreeFactory* factory = nullptr);
+    
     bool executeScript(const std::string& scriptPath);
     bool executeString(const std::string& scriptCode);
     sol::state& getState();
@@ -34,8 +41,12 @@ public:
     bool isBehaviorTreeInitialized() const { return btBridge_ != nullptr; }
 
 private:
+    LuaSimBinding();  // Private constructor
+    ~LuaSimBinding();
+
     void registerFunctions();
     void registerSimAPI();
+    void registerBehaviorTreeAPI();
     void registerUtilityFunctions();
     void setupCallbacks();
 

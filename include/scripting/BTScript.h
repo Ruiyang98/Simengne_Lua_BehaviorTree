@@ -12,6 +12,7 @@
 namespace scripting {
 
 // Lua + Behavior Tree hybrid script
+// Executes Lua logic in sandbox environment, uses entity.vars to store variables
 class BTScript : public Script {
 public:
     BTScript(const std::string& name, 
@@ -20,7 +21,8 @@ public:
              const std::string& treeName,
              sol::state& luaState, 
              const std::string& entityId,
-             BT::BehaviorTreeFactory* factory);
+             BT::BehaviorTreeFactory* factory,
+             sol::table& env);
     
     ~BTScript() override;
     
@@ -50,6 +52,9 @@ private:
     
     // Lua execute function
     sol::function executeFunc_;
+    
+    // Sandbox environment
+    sol::table env_;
     
     // Initialize Lua script
     bool initializeScript(const std::string& scriptCode);

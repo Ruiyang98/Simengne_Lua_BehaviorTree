@@ -6,11 +6,13 @@ namespace scripting {
 TacticalScript::TacticalScript(const std::string& name, 
                                const std::string& scriptCode,
                                sol::state& luaState, 
-                               const std::string& entityId)
+                               const std::string& entityId,
+                               sol::table& env)
     : Script(name, ScriptType::TACTICAL)
     , luaState_(luaState)
     , entityId_(entityId)
-    , executeFunc_(sol::nil) {
+    , executeFunc_(sol::nil)
+    , env_(env) {
     
     if (!initializeScript(scriptCode)) {
         std::cerr << "[TacticalScript] Failed to initialize script: " << name << std::endl;
@@ -22,11 +24,30 @@ TacticalScript::~TacticalScript() {
 
 bool TacticalScript::initializeScript(const std::string& scriptCode) {
     try {
-        // Execute script code to define execute function
-        luaState_.script(scriptCode);
+        // Load script in sandbox environment
+        // Use load function to load script in specified environment
+        sol::load_result loadResult = luaState_.load(scriptCode);
         
-        // Get execute function
-        executeFunc_ = luaState_["execute"];
+        if (!loadResult.valid()) {
+            sol::error err = loadResult;
+            std::cerr << "[TacticalScript] Error loading script '" << name_ << "': " << err.what() << std::endl;
+            return false;
+        }
+        
+        sol::function scriptFunc = loadResult;
+        
+        // Execute script to define execute function in sandbox environment
+        sol::environment env(luaState_, sol::create, env_);
+        auto result = luaState_.script(scriptCode, env);
+        
+        if (!result.valid()) {
+            sol::error err = result;
+            std::cerr << "[TacticalScript] Error executing script '" << name_ << "': " << err.what() << std::endl;
+            return false;
+        }
+        
+        // Get execute function from sandbox environment
+        executeFunc_ = env["execute"];
         
         if (!executeFunc_.valid()) {
             std::cerr << "[TacticalScript] No 'execute' function found in script: " << name_ << std::endl;
@@ -51,9 +72,9 @@ void TacticalScript::execute() {
     }
     
     try {
-        // Call Lua execute function with entity_id and sim
-        SimControlInterface* simInterface = SimControlInterface::getInstance();
-        auto result = executeFunc_(entityId_, simInterface);
+        // Call execute function in sandbox environment
+        // No longer pass entity_id, sim, etc. - scripts access via entity table
+        auto result = executeFunc_();
         
         if (!result.valid()) {
             sol::error err = result;

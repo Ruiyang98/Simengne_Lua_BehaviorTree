@@ -16,10 +16,12 @@
 namespace scripting {
 
 // Entity script manager - one per entity
+// Uses global Lua state, each entity has its own variable table
 class EntityScriptManager {
 public:
-    // Constructor
+    // Constructor - receives global Lua state reference
     EntityScriptManager(const std::string& entityId, 
+                        sol::state& globalLuaState,
                         BT::BehaviorTreeFactory* factory);
     
     ~EntityScriptManager();
@@ -59,8 +61,14 @@ public:
     // Get script
     std::shared_ptr<Script> getScript(const std::string& scriptName) const;
     
-    // Get Lua state
+    // Get Lua state (global state)
     sol::state& getLuaState() { return luaState_; }
+    
+    // Get entity table (contains vars and methods)
+    sol::table& getEntityTable() { return entityTable_; }
+    
+    // Get entity variables table
+    sol::table& getVariables() { return variables_; }
     
     // Get last error message
     const std::string& getLastError() const { return lastError_; }
@@ -68,16 +76,22 @@ public:
 private:
     std::string entityId_;
     BT::BehaviorTreeFactory* factory_;
+    sol::state& luaState_;  // Reference to global Lua state
+    
+    // Entity related tables
+    sol::table entityTable_;    // entity table (contains id, vars, methods)
+    sol::table variables_;      // entity.vars variable storage
+    sol::table env_;            // script execution environment (sandbox)
+    
     std::unordered_map<std::string, std::shared_ptr<Script>> scripts_;
     mutable std::mutex mutex_;
-    sol::state luaState_;  // Each manager has its own Lua state
     std::string lastError_;
     
-    // Initialize Lua state
-    void initializeLuaState();
+    // Initialize entity table
+    void initializeEntityTable();
     
-    // Register Lua API
-    void registerLuaAPI();
+    // Create sandbox environment for script execution
+    void createSandbox();
 };
 
 } // namespace scripting

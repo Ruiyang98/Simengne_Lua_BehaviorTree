@@ -547,20 +547,20 @@ int main(int argc, char* argv[]) {
     std::cout << "OK: Behavior tree executor initialized" << std::endl;
     std::cout << std::endl;
 
-    // Create Lua binding
-    std::unique_ptr<LuaSimBinding> luaBinding(new LuaSimBinding());
+    // Initialize Lua binding singleton
+    scripting::LuaSimBinding& luaBinding = scripting::LuaSimBinding::getInstance();
 
-    // Initialize Lua environment
-    if (!luaBinding->initialize()) {
-        std::cerr << "Lua initialization failed: " << luaBinding->getLastError() << std::endl;
+    // Initialize Lua environment with BT factory
+    if (!luaBinding.initialize(&g_btExecutor->getFactory())) {
+        std::cerr << "Lua initialization failed: " << luaBinding.getLastError() << std::endl;
         return 1;
     }
 
     std::cout << "OK: Lua environment initialized" << std::endl;
 
     // Initialize Lua-BehaviorTree bridge (auto-loads registry and XML files)
-    if (!luaBinding->initializeBehaviorTree(&g_btExecutor->getFactory())) {
-        std::cerr << "WARNING: Lua-BT bridge initialization failed: " << luaBinding->getLastError() << std::endl;
+    if (!luaBinding.isBehaviorTreeInitialized()) {
+        std::cerr << "WARNING: Lua-BT bridge initialization failed: " << luaBinding.getLastError() << std::endl;
         std::cout << "OK: Lua environment ready (without BT integration)" << std::endl;
     } else {
         std::cout << "OK: Lua-BehaviorTree bridge initialized (registry and XML auto-loaded)" << std::endl;
@@ -572,7 +572,7 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl;
 
     // Run interactive mode
-    runInteractiveMode(luaBinding.get());
+    runInteractiveMode(&luaBinding);
 
     std::cout << std::endl;
     std::cout << "========================================" << std::endl;
@@ -580,7 +580,7 @@ int main(int argc, char* argv[]) {
     std::cout << "========================================" << std::endl;
 
     // Cleanup
-    luaBinding.reset();
+    // LuaBinding 单例会自动清理
     g_btExecutor.reset();
     
     // Meyers' singleton will be automatically cleaned up at program exit

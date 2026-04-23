@@ -1,5 +1,6 @@
 #include "simulation/MockSimController.h"
 #include "scripting/EntityScriptManager.h"
+#include "scripting/LuaSimBinding.h"
 #include <cmath>
 
 
@@ -200,7 +201,20 @@ std::shared_ptr<scripting::EntityScriptManager> MockSimController::createScriptM
         return entityScriptManagers_[entityId];
     }
     
-    auto manager = std::make_shared<scripting::EntityScriptManager>(entityId, btFactory_);
+    // Get global Lua state
+    scripting::LuaSimBinding& luaBinding = scripting::LuaSimBinding::getInstance();
+    if (!luaBinding.isInitialized()) {
+        if (verbose_) {
+            std::cout << "[MockSim] Lua binding not initialized, initializing now..." << std::endl;
+        }
+        if (!luaBinding.initialize(btFactory_)) {
+            std::cerr << "[MockSim] Failed to initialize Lua binding" << std::endl;
+            return nullptr;
+        }
+    }
+    
+    // Create EntityScriptManager using global Lua state
+    auto manager = std::make_shared<scripting::EntityScriptManager>(entityId, luaBinding.getState(), btFactory_);
     entityScriptManagers_[entityId] = manager;
     
     if (verbose_) {

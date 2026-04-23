@@ -10,6 +10,12 @@
 
 namespace scripting {
 
+// Singleton instance getter
+LuaSimBinding& LuaSimBinding::getInstance() {
+    static LuaSimBinding instance;
+    return instance;
+}
+
 LuaSimBinding::LuaSimBinding()
     : initialized_(false) {
 }
@@ -28,7 +34,11 @@ LuaSimBinding::~LuaSimBinding() {
     luaCallbacks_.clear();
 }
 
-bool LuaSimBinding::initialize() {
+bool LuaSimBinding::initialize(BT::BehaviorTreeFactory* factory) {
+    if (initialized_) {
+        return true;  // Already initialized, return success
+    }
+    
     if (!SimControlInterface::getInstance()) {
         lastError_ = "SimControlInterface instance is null";
         return false;
@@ -55,6 +65,12 @@ bool LuaSimBinding::initialize() {
         setupCallbacks();
 
         initialized_ = true;
+        
+        // If factory provided, auto-initialize behavior tree bridge
+        if (factory) {
+            return initializeBehaviorTree(factory);
+        }
+        
         return true;
         
     } catch (const std::exception& e) {
@@ -113,6 +129,7 @@ const std::string& LuaSimBinding::getLastError() const {
 
 void LuaSimBinding::registerFunctions() {
     registerSimAPI();
+    registerBehaviorTreeAPI();
     registerUtilityFunctions();
 }
 
@@ -376,7 +393,7 @@ void LuaSimBinding::registerSimAPI() {
         }
     });
 
-    // Script manager API
+    // Script manager API - uses global Lua state to create script managers
     simTable.set_function("create_script_manager", [this](const std::string& entityId) -> sol::optional<sol::table> {
         MockSimController* mockSim = static_cast<MockSimController*>(SimControlInterface::getInstance());
         if (!mockSim) {
@@ -416,8 +433,8 @@ void LuaSimBinding::registerSimAPI() {
             return manager->disableScript(scriptName);
         });
         
-        managerTable.set_function("get_scripts", [manager]() -> sol::table {
-            sol::table scripts = manager->getLuaState().create_table();
+        managerTable.set_function("get_scripts", [manager, this]() -> sol::table {
+            sol::table scripts = luaState_->create_table();
             auto names = manager->getScriptNames();
             for (size_t i = 0; i < names.size(); ++i) {
                 scripts[i + 1] = names[i];
@@ -481,8 +498,8 @@ void LuaSimBinding::registerSimAPI() {
             return manager->disableScript(scriptName);
         });
         
-        managerTable.set_function("get_scripts", [manager]() -> sol::table {
-            sol::table scripts = manager->getLuaState().create_table();
+        managerTable.set_function("get_scripts", [manager, this]() -> sol::table {
+            sol::table scripts = luaState_->create_table();
             auto names = manager->getScriptNames();
             for (size_t i = 0; i < names.size(); ++i) {
                 scripts[i + 1] = names[i];
@@ -508,6 +525,11 @@ void LuaSimBinding::registerSimAPI() {
         }
         return mockSim->hasScriptManager(entityId);
     });
+}
+
+void LuaSimBinding::registerBehaviorTreeAPI() {
+    // Behavior tree API will be registered in initializeBehaviorTree via btBridge_
+    // Reserved interface, actual registration done in LuaBehaviorTreeBridge
 }
 
 void LuaSimBinding::registerUtilityFunctions() {

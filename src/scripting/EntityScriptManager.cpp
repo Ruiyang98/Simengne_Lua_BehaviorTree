@@ -6,12 +6,14 @@
 namespace scripting {
 
 EntityScriptManager::EntityScriptManager(const std::string& entityId, 
+                                         sol::state& globalLuaState,
                                          BT::BehaviorTreeFactory* factory)
     : entityId_(entityId)
-    , factory_(factory) {
+    , factory_(factory)
+    , luaState_(globalLuaState) {
     
-    initializeLuaState();
-    registerLuaAPI();
+    initializeEntityTable();
+    createSandbox();
 }
 
 EntityScriptManager::~EntityScriptManager() {
@@ -19,148 +21,103 @@ EntityScriptManager::~EntityScriptManager() {
     scripts_.clear();
 }
 
-void EntityScriptManager::initializeLuaState() {
+void EntityScriptManager::initializeEntityTable() {
     try {
-        // Open standard libraries
-        luaState_.open_libraries(
-            sol::lib::base,
-            sol::lib::package,
-            sol::lib::coroutine,
-            sol::lib::string,
-            sol::lib::os,
-            sol::lib::math,
-            sol::lib::table,
-            sol::lib::debug,
-            sol::lib::bit32,
-            sol::lib::io
-        );
+        // Create entity table
+        entityTable_ = luaState_.create_table();
         
-        // Set entity_id global variable
-        luaState_["entity_id"] = entityId_;
+        // Set entity.id
+        entityTable_["id"] = entityId_;
+        
+        // Create vars sub-table for variable storage
+        variables_ = luaState_.create_table();
+        entityTable_["vars"] = variables_;
+        
+        // Register variable operation methods
+        entityTable_.set_function("set_var", [this](const std::string& key, sol::object value) {
+            variables_[key] = value;
+        });
+        
+        entityTable_.set_function("get_var", [this](const std::string& key, sol::object defaultValue) -> sol::object {
+            sol::object val = variables_[key];
+            if (val == sol::nil && defaultValue != sol::nil) {
+                return defaultValue;
+            }
+            return val;
+        });
+        
+        entityTable_.set_function("has_var", [this](const std::string& key) -> bool {
+            sol::object val = variables_[key];
+            return val != sol::nil;
+        });
+        
+        entityTable_.set_function("remove_var", [this](const std::string& key) {
+            variables_[key] = sol::nil;
+        });
+        
+        entityTable_.set_function("clear_vars", [this]() {
+            variables_ = luaState_.create_table();
+            entityTable_["vars"] = variables_;
+        });
+        
+        entityTable_.set_function("get_all_vars", [this]() -> sol::table {
+            return variables_;
+        });
+        
+        // Store entity table in Lua registry using entityId as key
+        // This allows scripts to access via global variable, but each entity has its own table
+        luaState_["_ENTITIES"] = luaState_["_ENTITIES"] || luaState_.create_table();
+        luaState_["_ENTITIES"][entityId_] = entityTable_;
         
     } catch (const std::exception& e) {
-        std::cerr << "[EntityScriptManager] Error initializing Lua state: " << e.what() << std::endl;
+        std::cerr << "[EntityScriptManager] Error initializing entity table: " << e.what() << std::endl;
     }
 }
 
-void EntityScriptManager::registerLuaAPI() {
-    // Register SimAddress type
-    luaState_.new_usertype<SimAddress>("SimAddress",
-        "site", &SimAddress::site,
-        "host", &SimAddress::host
-    );
-
-    // Register VehicleID type
-    luaState_.new_usertype<VehicleID>("VehicleID",
-        "address", &VehicleID::address,
-        "vehicle", &VehicleID::vehicle
-    );
-    
-    // Create sim table
-    sol::table simTable = luaState_.create_named_table("sim");
-    
-    // Entity management functions
-    simTable.set_function("get_entity_position", [this](const std::string& entityId) -> sol::optional<sol::table> {
-        SimControlInterface* simInterface = SimControlInterface::getInstance();
-        if (!simInterface) {
-            return sol::nullopt;
-        }
+void EntityScriptManager::createSandbox() {
+    try {
+        // Create sandbox environment table
+        env_ = luaState_.create_table();
         
-        // Try to parse as vehicle ID
-        try {
-            int vehicleId = std::stoi(entityId);
-            VehicleID vid;
-            vid.address.site = 0;
-            vid.address.host = 0;
-            vid.vehicle = vehicleId;
-            
-            double x, y, z;
-            if (simInterface->getEntityPosition(vid, x, y, z)) {
-                sol::table pos = luaState_.create_table();
-                pos["x"] = x;
-                pos["y"] = y;
-                pos["z"] = z;
-                return pos;
+        // Set sandbox accessible global variables
+        // Allow access to standard libraries
+        env_["print"] = luaState_["print"];
+        env_["pairs"] = luaState_["pairs"];
+        env_["ipairs"] = luaState_["ipairs"];
+        env_["next"] = luaState_["next"];
+        env_["tonumber"] = luaState_["tonumber"];
+        env_["tostring"] = luaState_["tostring"];
+        env_["type"] = luaState_["type"];
+        env_["math"] = luaState_["math"];
+        env_["table"] = luaState_["table"];
+        env_["string"] = luaState_["string"];
+        env_["coroutine"] = luaState_["coroutine"];
+        env_["os"] = luaState_["os"];
+        
+        // Allow access to sim and bt tables
+        env_["sim"] = luaState_["sim"];
+        env_["bt"] = luaState_["bt"];
+        
+        // Set entity table
+        env_["entity"] = entityTable_;
+        
+        // Set metatable to allow access to other global variables (read-only)
+        sol::table metaTable = luaState_.create_table();
+        metaTable.set_function("__index", [this](sol::table t, const std::string& key) -> sol::object {
+            // First search in env_
+            sol::object val = env_[key];
+            if (val != sol::nil) {
+                return val;
             }
-        } catch (...) {
-            // If not numeric ID, return empty
-        }
+            // Then search globally
+            return luaState_[key];
+        });
         
-        return sol::nullopt;
-    });
-    
-    simTable.set_function("get_all_entities", [this]() -> sol::table {
-        sol::table entities = luaState_.create_table();
+        env_[sol::metatable_key] = metaTable;
         
-        SimControlInterface* simInterface = SimControlInterface::getInstance();
-        if (simInterface) {
-            auto entityList = simInterface->getAllEntities();
-            for (size_t i = 0; i < entityList.size(); ++i) {
-                sol::table entity = luaState_.create_table();
-                entity["id"] = entityList[i].id.vehicle;
-                entity["type"] = entityList[i].type;
-                entity["x"] = entityList[i].x;
-                entity["y"] = entityList[i].y;
-                entity["z"] = entityList[i].z;
-                entities[i + 1] = entity;  // Lua arrays start from 1
-            }
-        }
-        
-        return entities;
-    });
-    
-    simTable.set_function("move_entity", [this](const std::string& entityId, double x, double y, double z) -> bool {
-        SimControlInterface* simInterface = SimControlInterface::getInstance();
-        if (!simInterface) {
-            return false;
-        }
-        
-        try {
-            int vehicleId = std::stoi(entityId);
-            VehicleID vid;
-            vid.address.site = 0;
-            vid.address.host = 0;
-            vid.vehicle = vehicleId;
-            
-            return simInterface->moveEntity(vid, x, y, z);
-        } catch (...) {
-            return false;
-        }
-    });
-    
-    simTable.set_function("get_entity_distance", [this](const std::string& entityId, double x, double y, double z) -> double {
-        SimControlInterface* simInterface = SimControlInterface::getInstance();
-        if (!simInterface) {
-            return -1.0;
-        }
-        
-        try {
-            int vehicleId = std::stoi(entityId);
-            VehicleID vid;
-            vid.address.site = 0;
-            vid.address.host = 0;
-            vid.vehicle = vehicleId;
-            
-            return simInterface->getEntityDistance(vid, x, y, z);
-        } catch (...) {
-            return -1.0;
-        }
-    });
-    
-    // Create bt table (blackboard operations)
-    sol::table btTable = luaState_.create_named_table("bt");
-    
-    // Note: blackboard operations need to be implemented in BTScript
-    // Here we register basic functions, actual functionality provided by BTScript
-    btTable.set_function("set_blackboard", [this](const std::string& entityId, const std::string& key, sol::object value) {
-        // This function will be overridden in BTScript to provide actual blackboard access
-        // Here is just a placeholder
-    });
-    
-    btTable.set_function("get_blackboard", [this](const std::string& entityId, const std::string& key) -> sol::object {
-        // Placeholder
-        return sol::nil;
-    });
+    } catch (const std::exception& e) {
+        std::cerr << "[EntityScriptManager] Error creating sandbox: " << e.what() << std::endl;
+    }
 }
 
 bool EntityScriptManager::addTacticalScript(const std::string& scriptName, const std::string& scriptCode) {
@@ -173,7 +130,7 @@ bool EntityScriptManager::addTacticalScript(const std::string& scriptName, const
     
     try {
         auto script = std::make_shared<TacticalScript>(
-            scriptName, scriptCode, luaState_, entityId_);
+            scriptName, scriptCode, luaState_, entityId_, env_);
         
         scripts_[scriptName] = script;
         std::cout << "[EntityScriptManager] Added tactical script '" << scriptName 
@@ -214,7 +171,7 @@ bool EntityScriptManager::addBTScript(const std::string& scriptName,
     try {
         auto script = std::make_shared<BTScript>(
             scriptName, scriptCode, xmlFile, treeName,
-            luaState_, entityId_, factory_);
+            luaState_, entityId_, factory_, env_);
         
         scripts_[scriptName] = script;
         std::cout << "[EntityScriptManager] Added BT script '" << scriptName 
@@ -271,6 +228,9 @@ bool EntityScriptManager::disableScript(const std::string& scriptName) {
 
 void EntityScriptManager::executeAllScripts() {
     std::lock_guard<std::mutex> lock(mutex_);
+    
+    // Update entity table reference (prevent Lua GC)
+    env_["entity"] = entityTable_;
     
     for (auto& pair : scripts_) {
         try {

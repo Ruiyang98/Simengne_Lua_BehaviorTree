@@ -11,7 +11,8 @@ BTScript::BTScript(const std::string& name,
                    const std::string& treeName,
                    sol::state& luaState, 
                    const std::string& entityId,
-                   BT::BehaviorTreeFactory* factory)
+                   BT::BehaviorTreeFactory* factory,
+                   sol::table& env)
     : Script(name, ScriptType::BEHAVIOR_TREE)
     , luaState_(luaState)
     , entityId_(entityId)
@@ -19,7 +20,8 @@ BTScript::BTScript(const std::string& name,
     , xmlFile_(xmlFile)
     , treeName_(treeName)
     , btInitialized_(false)
-    , executeFunc_(sol::nil) {
+    , executeFunc_(sol::nil)
+    , env_(env) {
     
     if (!scriptCode.empty()) {
         if (!initializeScript(scriptCode)) {
@@ -36,11 +38,18 @@ BTScript::~BTScript() {
 
 bool BTScript::initializeScript(const std::string& scriptCode) {
     try {
-        // Execute script code to define execute function
-        luaState_.script(scriptCode);
+        // Execute script to define execute function in sandbox environment
+        sol::environment env(luaState_, sol::create, env_);
+        auto result = luaState_.script(scriptCode, env);
         
-        // Get execute function
-        executeFunc_ = luaState_["execute"];
+        if (!result.valid()) {
+            sol::error err = result;
+            std::cerr << "[BTScript] Error executing script '" << name_ << "': " << err.what() << std::endl;
+            return false;
+        }
+        
+        // Get execute function from sandbox environment
+        executeFunc_ = env["execute"];
         
         if (!executeFunc_.valid()) {
             std::cerr << "[BTScript] No 'execute' function found in script: " << name_ << std::endl;
@@ -116,8 +125,8 @@ void BTScript::execute() {
     // 1. Execute Lua logic (update blackboard, etc.)
     if (executeFunc_.valid()) {
         try {
-            SimControlInterface* simInterface = SimControlInterface::getInstance();
-            auto result = executeFunc_(entityId_, simInterface);
+            // Call execute function in sandbox environment
+            auto result = executeFunc_();
             
             if (!result.valid()) {
                 sol::error err = result;
