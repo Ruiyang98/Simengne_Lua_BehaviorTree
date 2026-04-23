@@ -2,102 +2,107 @@
 #include "scripting/EntityScriptManager.h"
 #include "scripting/LuaSimBinding.h"
 #include <cmath>
-
+#include <fstream>
+#include <sstream>
 
 
 MockSimController::MockSimController()
-    : state_(0)
+    : state_(SimState::STOPPED)
     , simTime_(0.0)
     , timeScale_(1.0)
     , timeStep_(0.016)
-    , autoUpdate_(false)
     , running_(false)
+    , paused_(false)
     , verbose_(true)
     , nextVehicleId_(1)
-    , btFactory_(nullptr)
-    , scriptUpdateAccumulator_(0.0) {
+    , btFactory_(nullptr) {
 }
 
 MockSimController::~MockSimController() {
     stop();
-    if (updateThread_.joinable()) {
-        updateThread_.join();
-    }
 }
 
 bool MockSimController::start() {
-    if (state_ == 1) {
+    if (state_ == SimState::RUNNING) {
         if (verbose_) std::cout << "[MockSim] Already running" << std::endl;
         return false;
     }
 
-    state_ = 1;
+    state_ = SimState::RUNNING;
     running_ = true;
+    paused_ = false;
     
     if (verbose_) std::cout << "[MockSim] Simulation started" << std::endl;
     
-    notifyStart();
-
-    if (autoUpdate_) {
-        if (updateThread_.joinable()) {
-            updateThread_.join();
-        }
-        updateThread_ = std::thread(&MockSimController::runSimulationLoop, this);
+    if (onStartCallback_) {
+        onStartCallback_();
     }
 
     return true;
 }
 
 bool MockSimController::pause() {
-    if (state_ != 1) {
+    if (state_ != SimState::RUNNING) {
         if (verbose_) std::cout << "[MockSim] Cannot pause: not running" << std::endl;
         return false;
     }
 
-    state_ = 2;
+    state_ = SimState::PAUSED;
+    paused_ = true;
     if (verbose_) std::cout << "[MockSim] Simulation paused, time: " << simTime_ << "s" << std::endl;
     
-    notifyPause();
+    if (onPauseCallback_) {
+        onPauseCallback_();
+    }
     return true;
 }
 
 bool MockSimController::resume() {
-    if (state_ != 2) {
+    if (state_ != SimState::PAUSED) {
         if (verbose_) std::cout << "[MockSim] Cannot resume: not paused" << std::endl;
         return false;
     }
 
-    state_ = 1;
+    state_ = SimState::RUNNING;
+    paused_ = false;
     if (verbose_) std::cout << "[MockSim] Simulation resumed" << std::endl;
     
-    notifyResume();
+    if (onResumeCallback_) {
+        onResumeCallback_();
+    }
     return true;
 }
 
 bool MockSimController::stop() {
-    if (state_ == 0) {
+    if (state_ == SimState::STOPPED) {
         return false;
     }
 
-    state_ = 0;
+    state_ = SimState::STOPPED;
     running_ = false;
+    paused_ = false;
     
     if (verbose_) std::cout << "[MockSim] Simulation stopped, final time: " << simTime_ << "s" << std::endl;
     
-    notifyStop();
+    if (onStopCallback_) {
+        onStopCallback_();
+    }
     return true;
 }
 
 bool MockSimController::reset() {
-    bool wasRunning = (state_ == 1);
+    bool wasRunning = (state_ == SimState::RUNNING);
     
-    state_ = 0;
+    state_ = SimState::STOPPED;
     simTime_ = 0.0;
     running_ = false;
+    paused_ = false;
     
     if (verbose_) std::cout << "[MockSim] Simulation reset" << std::endl;
     
-    notifyReset();
+    if (onResetCallback_) {
+        onResetCallback_();
+    }
     
     if (wasRunning) {
         start();
@@ -107,19 +112,19 @@ bool MockSimController::reset() {
 }
 
 SimState MockSimController::getState() const {
-    return static_cast<SimState>(state_);
+    return state_;
 }
 
 bool MockSimController::isRunning() const {
-    return state_ == 1;
+    return state_ == SimState::RUNNING;
 }
 
 bool MockSimController::isPaused() const {
-    return state_ == 2;
+    return state_ == SimState::PAUSED;
 }
 
 bool MockSimController::isStopped() const {
-    return state_ == 0;
+    return state_ == SimState::STOPPED;
 }
 
 double MockSimController::getSimTime() const {
@@ -140,57 +145,187 @@ double MockSimController::getTimeScale() const {
     return timeScale_;
 }
 
-void MockSimController::setOnStartCallback(SimEventCallback callback) {
+void MockSimController::setOnStartCallback(std::function<void()> callback) {
     onStartCallback_ = callback;
 }
 
-void MockSimController::setOnPauseCallback(SimEventCallback callback) {
+void MockSimController::setOnPauseCallback(std::function<void()> callback) {
     onPauseCallback_ = callback;
 }
 
-void MockSimController::setOnResumeCallback(SimEventCallback callback) {
+void MockSimController::setOnResumeCallback(std::function<void()> callback) {
     onResumeCallback_ = callback;
 }
 
-void MockSimController::setOnStopCallback(SimEventCallback callback) {
+void MockSimController::setOnStopCallback(std::function<void()> callback) {
     onStopCallback_ = callback;
 }
 
-void MockSimController::setOnResetCallback(SimEventCallback callback) {
+void MockSimController::setOnResetCallback(std::function<void()> callback) {
     onResetCallback_ = callback;
 }
 
-void MockSimController::update(double deltaTime) {
-    if (state_ == 1) {
-        simTime_ = simTime_ + deltaTime * timeScale_;
-        
-        // Update scripts
-        updateScripts(deltaTime);
-    }
+void MockSimController::setVerbose(bool verbose) {
+    verbose_ = verbose;
 }
 
-void MockSimController::updateScripts(double deltaTime) {
-    scriptUpdateAccumulator_ += deltaTime * timeScale_;
-    
-    if (scriptUpdateAccumulator_ >= SCRIPT_UPDATE_INTERVAL) {
-        scriptUpdateAccumulator_ -= SCRIPT_UPDATE_INTERVAL;
-        
-        // Execute all entity script managers
-        for (auto& pair : entityScriptManagers_) {
-            try {
-                pair.second->executeAllScripts();
-            } catch (const std::exception& e) {
-                if (verbose_) {
-                    std::cout << "[MockSim] Error executing scripts for entity " << pair.first 
-                              << ": " << e.what() << std::endl;
-                }
-            }
-        }
-    }
+bool MockSimController::isVerbose() const {
+    return verbose_;
 }
 
 void MockSimController::setBehaviorTreeFactory(BT::BehaviorTreeFactory* factory) {
     btFactory_ = factory;
+}
+
+VehicleID MockSimController::generateVehicleId() {
+    VehicleID id;
+    id.address.site = 0;
+    id.address.host = 0;
+    id.vehicle = nextVehicleId_++;
+    return id;
+}
+
+VehicleID MockSimController::addEntity(const std::string& type, double x, double y, double z) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    VehicleID vehicleId = generateVehicleId();
+    entities_[vehicleId] = EntityExt(vehicleId, type, x, y, z);
+    
+    // Auto-create script manager for this entity
+    std::string entityId = std::to_string(vehicleId.vehicle);
+    createScriptManager(entityId);
+    
+    if (verbose_) {
+        std::cout << "[MockSim] Entity added: vehicle=" << vehicleId.vehicle
+                  << " (type: " << type << ") at ("
+                  << x << ", " << y << ", " << z << ")" << std::endl;
+    }
+
+    return vehicleId;
+}
+
+bool MockSimController::removeEntity(const VehicleID& vehicleId) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = entities_.find(vehicleId);
+    if (it == entities_.end()) {
+        if (verbose_) {
+            std::cout << "[MockSim] Failed to remove entity: vehicle=" << vehicleId.vehicle << " (not found)" << std::endl;
+        }
+        return false;
+    }
+
+    entities_.erase(it);
+    
+    // Also remove script manager
+    std::string entityId = std::to_string(vehicleId.vehicle);
+    removeScriptManager(entityId);
+
+    if (verbose_) {
+        std::cout << "[MockSim] Entity removed: vehicle=" << vehicleId.vehicle << std::endl;
+    }
+
+    return true;
+}
+
+bool MockSimController::moveEntity(const VehicleID& vehicleId, double x, double y, double z) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = entities_.find(vehicleId);
+    if (it == entities_.end()) {
+        if (verbose_) {
+            std::cout << "[MockSim] Failed to move entity: vehicle=" << vehicleId.vehicle << " (not found)" << std::endl;
+        }
+        return false;
+    }
+
+    it->second.x = x;
+    it->second.y = y;
+    it->second.z = z;
+
+    if (verbose_) {
+        std::cout << "[MockSim] Entity moved: vehicle=" << vehicleId.vehicle << " to (" << x << ", " << y << ", " << z << ")" << std::endl;
+    }
+
+    return true;
+}
+
+bool MockSimController::getEntityPosition(const VehicleID& vehicleId, double& x, double& y, double& z) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = entities_.find(vehicleId);
+    if (it == entities_.end()) {
+        return false;
+    }
+
+    x = it->second.x;
+    y = it->second.y;
+    z = it->second.z;
+
+    return true;
+}
+
+std::vector<Entity> MockSimController::getAllEntities() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    std::vector<Entity> result;
+    result.reserve(entities_.size());
+    
+    for (const auto& pair : entities_) {
+        result.push_back(pair.second);
+    }
+    
+    return result;
+}
+
+size_t MockSimController::getEntityCount() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return entities_.size();
+}
+
+bool MockSimController::setEntityMoveDirection(const VehicleID& vehicleId, double dx, double dy, double dz) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = entities_.find(vehicleId);
+    if (it == entities_.end()) {
+        if (verbose_) {
+            std::cout << "[MockSim] Failed to set move direction for entity: vehicle=" << vehicleId.vehicle << " (not found)" << std::endl;
+        }
+        return false;
+    }
+
+    // Normalize direction vector
+    double length = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (length > 0) {
+        dx /= length;
+        dy /= length;
+        dz /= length;
+    }
+
+    it->second.dx = dx;
+    it->second.dy = dy;
+    it->second.dz = dz;
+
+    if (verbose_) {
+        std::cout << "[MockSim] Entity vehicle=" << vehicleId.vehicle << " direction set to (" << dx << ", " << dy << ", " << dz << ")" << std::endl;
+    }
+
+    return true;
+}
+
+double MockSimController::getEntityDistance(const VehicleID& vehicleId, double x, double y, double z) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = entities_.find(vehicleId);
+    if (it == entities_.end()) {
+        return -1.0;
+    }
+
+    double dx = it->second.x - x;
+    double dy = it->second.y - y;
+    double dz = it->second.z - z;
+
+    return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 
 std::shared_ptr<scripting::EntityScriptManager> MockSimController::createScriptManager(const std::string& entityId) {
@@ -239,7 +374,7 @@ bool MockSimController::removeScriptManager(const std::string& entityId) {
     return true;
 }
 
-std::shared_ptr<scripting::EntityScriptManager> MockSimController::getScriptManager(const std::string& entityId) {
+std::shared_ptr<scripting::EntityScriptManager> MockSimController::getScriptManager(const std::string& entityId) const {
     auto it = entityScriptManagers_.find(entityId);
     if (it != entityScriptManagers_.end()) {
         return it->second;
@@ -251,198 +386,84 @@ bool MockSimController::hasScriptManager(const std::string& entityId) const {
     return entityScriptManagers_.find(entityId) != entityScriptManagers_.end();
 }
 
-std::vector<std::string> MockSimController::getManagedEntityIds() const {
-    std::vector<std::string> ids;
-    ids.reserve(entityScriptManagers_.size());
-    
-    for (const auto& pair : entityScriptManagers_) {
-        ids.push_back(pair.first);
+bool MockSimController::addScriptToEntity(const std::string& entityId, 
+                                           const std::string& scriptName,
+                                           const std::string& scriptCode) {
+    auto manager = getScriptManager(entityId);
+    if (!manager) {
+        std::cerr << "[MockSim] No script manager for entity: " << entityId << std::endl;
+        return false;
     }
     
-    return ids;
+    return manager->addTacticalScript(scriptName, scriptCode);
 }
 
-void MockSimController::setAutoUpdate(bool enable) {
-    autoUpdate_ = enable;
-}
-
-void MockSimController::setVerbose(bool verbose) {
-    verbose_ = verbose;
-}
-
-void MockSimController::runSimulationLoop() {
-    using namespace std::chrono;
-    steady_clock::time_point lastTime = steady_clock::now();
+bool MockSimController::addScriptToEntityFromFile(const std::string& entityId,
+                                                   const std::string& scriptName,
+                                                   const std::string& filePath) {
+    std::ifstream file(filePath);
+    if (!file.is_open()) {
+        std::cerr << "[MockSim] Cannot open script file: " << filePath << std::endl;
+        return false;
+    }
     
-    while (running_) {
-        steady_clock::time_point currentTime = steady_clock::now();
-        double deltaTime = duration<double>(currentTime - lastTime).count();
-        lastTime = currentTime;
-        
-        update(deltaTime);
-        
-        std::this_thread::sleep_for(milliseconds(16));
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    file.close();
+    
+    return addScriptToEntity(entityId, scriptName, buffer.str());
+}
+
+bool MockSimController::removeScriptFromEntity(const std::string& entityId,
+                                                const std::string& scriptName) {
+    auto manager = getScriptManager(entityId);
+    if (!manager) {
+        return false;
     }
+    
+    return manager->removeScript(scriptName);
 }
 
-void MockSimController::notifyStart() {
-    if (onStartCallback_) {
-        onStartCallback_();
+bool MockSimController::enableEntityScript(const std::string& entityId,
+                                            const std::string& scriptName) {
+    auto manager = getScriptManager(entityId);
+    if (!manager) {
+        return false;
     }
+    
+    return manager->enableScript(scriptName);
 }
 
-void MockSimController::notifyPause() {
-    if (onPauseCallback_) {
-        onPauseCallback_();
+bool MockSimController::disableEntityScript(const std::string& entityId,
+                                             const std::string& scriptName) {
+    auto manager = getScriptManager(entityId);
+    if (!manager) {
+        return false;
     }
+    
+    return manager->disableScript(scriptName);
 }
 
-void MockSimController::notifyResume() {
-    if (onResumeCallback_) {
-        onResumeCallback_();
+std::vector<std::string> MockSimController::getEntityScriptNames(const std::string& entityId) const {
+    auto manager = getScriptManager(entityId);
+    if (!manager) {
+        return {};
     }
+    
+    return manager->getScriptNames();
 }
 
-void MockSimController::notifyStop() {
-    if (onStopCallback_) {
-        onStopCallback_();
-    }
-}
-
-void MockSimController::notifyReset() {
-    if (onResetCallback_) {
-        onResetCallback_();
-    }
-}
-
-VehicleID MockSimController::generateVehicleId() {
-    VehicleID id;
-    id.address.site = 0;
-    id.address.host = 0;
-    id.vehicle = nextVehicleId_.fetch_add(1);
-    return id;
-}
-
-VehicleID MockSimController::addEntity(const std::string& type, double x, double y, double z) {
-    VehicleID vehicleId = generateVehicleId();
-    entities_[vehicleId] = Entity(vehicleId, type, x, y, z);
-
-    if (verbose_) {
-        std::cout << "[MockSim] Entity added: vehicle=" << vehicleId.vehicle
-                  << " (type: " << type << ") at ("
-                  << x << ", " << y << ", " << z << ")" << std::endl;
-    }
-
-    return vehicleId;
-}
-
-bool MockSimController::removeEntity(const VehicleID& entityId) {
-    auto it = entities_.find(entityId);
-    if (it == entities_.end()) {
-        if (verbose_) {
-            std::cout << "[MockSim] Failed to remove entity: vehicle=" << entityId.vehicle << " (not found)" << std::endl;
+void MockSimController::executeAllEntityScripts() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    for (auto& pair : entityScriptManagers_) {
+        try {
+            pair.second->executeAllScripts();
+        } catch (const std::exception& e) {
+            if (verbose_) {
+                std::cout << "[MockSim] Error executing scripts for entity " << pair.first 
+                          << ": " << e.what() << std::endl;
+            }
         }
-        return false;
     }
-
-    entities_.erase(it);
-
-    if (verbose_) {
-        std::cout << "[MockSim] Entity removed: vehicle=" << entityId.vehicle << std::endl;
-    }
-
-    return true;
-}
-
-bool MockSimController::moveEntity(const VehicleID& entityId, double x, double y, double z) {
-    auto it = entities_.find(entityId);
-    if (it == entities_.end()) {
-        if (verbose_) {
-            std::cout << "[MockSim] Failed to move entity: vehicle=" << entityId.vehicle << " (not found)" << std::endl;
-        }
-        return false;
-    }
-
-    it->second.x = x;
-    it->second.y = y;
-    it->second.z = z;
-
-    if (verbose_) {
-        std::cout << "[MockSim] Entity moved: vehicle=" << entityId.vehicle << " to (" << x << ", " << y << ", " << z << ")" << std::endl;
-    }
-
-    return true;
-}
-
-bool MockSimController::getEntityPosition(const VehicleID& entityId, double& x, double& y, double& z) {
-    auto it = entities_.find(entityId);
-    if (it == entities_.end()) {
-        return false;
-    }
-
-    x = it->second.x;
-    y = it->second.y;
-    z = it->second.z;
-
-    return true;
-}
-
-std::vector<Entity> MockSimController::getAllEntities() {
-    std::vector<Entity> result;
-    result.reserve(entities_.size());
-    
-    for (const auto& pair : entities_) {
-        result.push_back(pair.second);
-    }
-    
-    return result;
-}
-
-size_t MockSimController::getEntityCount() {
-	return entities_.size();
-}
-
-bool MockSimController::setEntityMoveDirection(const VehicleID& entityId, double dx, double dy, double dz) {
-    auto it = entities_.find(entityId);
-    if (it == entities_.end()) {
-        if (verbose_) {
-            std::cout << "[MockSim] Failed to set move direction for entity: vehicle=" << entityId.vehicle << " (not found)" << std::endl;
-        }
-        return false;
-    }
-
-    // Normalize direction vector
-    double length = std::sqrt(dx * dx + dy * dy + dz * dz);
-    if (length > 0) {
-        dx /= length;
-        dy /= length;
-        dz /= length;
-    }
-
-    // Store direction in the entity (using a simple approach - in real implementation
-    // this would be stored separately and applied during simulation update)
-    // For now, we just move the entity immediately by a small amount in that direction
-    double moveSpeed = 1.0; // units per tick
-    it->second.x += dx * moveSpeed;
-    it->second.y += dy * moveSpeed;
-    it->second.z += dz * moveSpeed;
-
-    if (verbose_) {
-        std::cout << "[MockSim] Entity vehicle=" << entityId.vehicle << " moved in direction (" << dx << ", " << dy << ", " << dz << ")" << std::endl;
-    }
-
-    return true;
-}
-
-double MockSimController::getEntityDistance(const VehicleID& entityId, double x, double y, double z) {
-    auto it = entities_.find(entityId);
-    if (it == entities_.end()) {
-        return -1.0;
-    }
-
-    double dx = it->second.x - x;
-    double dy = it->second.y - y;
-    double dz = it->second.z - z;
-
-    return std::sqrt(dx * dx + dy * dy + dz * dz);
 }

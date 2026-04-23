@@ -2,122 +2,131 @@
 #define MOCK_SIM_CONTROLLER_H
 
 #include "simulation/SimControlInterface.h"
+#include "scripting/EntityScriptManager.h"
 #include <behaviortree_cpp_v3/bt_factory.h>
-#include <chrono>
-#include <thread>
-#include <iostream>
-#include <map>
-#include <atomic>
 #include <unordered_map>
 #include <memory>
+#include <mutex>
+#include <functional>
+#include <vector>
+#include <string>
+#include <atomic>
 
 namespace scripting {
     class EntityScriptManager;
 }
 
+// Hash function for VehicleID
+struct VehicleIDHash {
+    std::size_t operator()(const VehicleID& vid) const {
+        return std::hash<int>()(vid.address.site) ^
+               (std::hash<int>()(vid.address.host) << 1) ^
+               (std::hash<int>()(vid.vehicle) << 2);
+    }
+};
+
+// Extended Entity structure with movement direction
+struct EntityExt : public Entity {
+    double dx, dy, dz;  // Movement direction
+    
+    EntityExt() : Entity(), dx(0), dy(0), dz(0) {}
+    EntityExt(const VehicleID& vid, const std::string& t, double xPos, double yPos, double zPos)
+        : Entity(vid, t, xPos, yPos, zPos), dx(0), dy(0), dz(0) {}
+};
+
+// Mock simulation controller implementing the SimControlInterface
 class MockSimController : public SimControlInterface {
 public:
-    // Control commands
-    bool start();
-    bool pause();
-    bool resume();
-    bool stop();
-    bool reset();
-
-    // State queries
-    SimState getState() const;
-    bool isRunning() const;
-    bool isPaused() const;
-    bool isStopped() const;
-    double getSimTime() const;
-    double getTimeStep() const;
-
-    // Speed control
-    void setTimeScale(double scale);
-    double getTimeScale() const;
-
-    // Event callbacks
-    void setOnStartCallback(SimEventCallback callback);
-    void setOnPauseCallback(SimEventCallback callback);
-    void setOnResumeCallback(SimEventCallback callback);
-    void setOnStopCallback(SimEventCallback callback);
-    void setOnResetCallback(SimEventCallback callback);
-
-    // MockSimController specific methods
-    void update(double deltaTime);
-    void setAutoUpdate(bool enable);
-    void setVerbose(bool verbose);
-
-    // Entity management implementation
-    VehicleID addEntity(const std::string& type, double x, double y, double z);
-    bool removeEntity(const VehicleID& entityId);
-    bool moveEntity(const VehicleID& entityId, double x, double y, double z);
-    bool getEntityPosition(const VehicleID& entityId, double& x, double& y, double& z);
-    std::vector<Entity> getAllEntities();
-    size_t getEntityCount();
-
-    // New movement interface
-    bool setEntityMoveDirection(const VehicleID& entityId, double dx, double dy, double dz);
-    double getEntityDistance(const VehicleID& entityId, double x, double y, double z);
-
-    // Script manager methods
-    void setBehaviorTreeFactory(BT::BehaviorTreeFactory* factory);
-    std::shared_ptr<scripting::EntityScriptManager> createScriptManager(const std::string& entityId);
-    bool removeScriptManager(const std::string& entityId);
-    std::shared_ptr<scripting::EntityScriptManager> getScriptManager(const std::string& entityId);
-    bool hasScriptManager(const std::string& entityId) const;
-    std::vector<std::string> getManagedEntityIds() const;
-
-    // Meyers' singleton - allow SimControlInterface::getInstance() to create instance
     MockSimController();
     ~MockSimController();
 
+    // SimControlInterface implementation
+    bool start() override;
+    bool pause() override;
+    bool resume() override;
+    bool stop() override;
+    bool reset() override;
+
+    SimState getState() const override;
+    bool isRunning() const override;
+    bool isPaused() const override;
+    bool isStopped() const override;
+
+    double getSimTime() const override;
+    double getTimeStep() const override;
+    void setTimeScale(double scale) override;
+    double getTimeScale() const override;
+
+    VehicleID addEntity(const std::string& type, double x, double y, double z) override;
+    bool removeEntity(const VehicleID& vehicleId) override;
+    bool moveEntity(const VehicleID& vehicleId, double x, double y, double z) override;
+    bool getEntityPosition(const VehicleID& vehicleId, double& x, double& y, double& z) override;
+    std::vector<Entity> getAllEntities() override;
+    size_t getEntityCount() override;
+
+    bool setEntityMoveDirection(const VehicleID& vehicleId, double dx, double dy, double dz) override;
+    double getEntityDistance(const VehicleID& vehicleId, double x, double y, double z) override;
+
+    // Set callbacks
+    void setOnStartCallback(std::function<void()> callback) override;
+    void setOnPauseCallback(std::function<void()> callback) override;
+    void setOnResumeCallback(std::function<void()> callback) override;
+    void setOnStopCallback(std::function<void()> callback) override;
+    void setOnResetCallback(std::function<void()> callback) override;
+
+    // Additional mock-specific methods
+    void setVerbose(bool verbose);
+    bool isVerbose() const;
+
+    // Set behavior tree factory for script manager support
+    void setBehaviorTreeFactory(BT::BehaviorTreeFactory* factory);
+
+    // Entity script manager methods (C++ layer only)
+    std::shared_ptr<scripting::EntityScriptManager> createScriptManager(const std::string& entityId);
+    bool removeScriptManager(const std::string& entityId);
+    std::shared_ptr<scripting::EntityScriptManager> getScriptManager(const std::string& entityId) const;
+    bool hasScriptManager(const std::string& entityId) const;
+
+    // Script management methods (C++ layer)
+    bool addScriptToEntity(const std::string& entityId, 
+                           const std::string& scriptName,
+                           const std::string& scriptCode);
+    bool addScriptToEntityFromFile(const std::string& entityId,
+                                    const std::string& scriptName,
+                                    const std::string& filePath);
+    bool removeScriptFromEntity(const std::string& entityId,
+                                 const std::string& scriptName);
+    bool enableEntityScript(const std::string& entityId,
+                            const std::string& scriptName);
+    bool disableEntityScript(const std::string& entityId,
+                             const std::string& scriptName);
+    std::vector<std::string> getEntityScriptNames(const std::string& entityId) const;
+
 private:
-    // Disable copy and assignment
-    MockSimController(const MockSimController&) = delete;
-    MockSimController& operator=(const MockSimController&) = delete;
-
-    void runSimulationLoop();
-    void notifyStart();
-    void notifyPause();
-    void notifyResume();
-    void notifyStop();
-    void notifyReset();
     VehicleID generateVehicleId();
+    void executeAllEntityScripts();
 
-    // State
-    volatile int state_;
-    volatile double simTime_;
-    volatile double timeScale_;
+    mutable std::mutex mutex_;
+    SimState state_;
+    double simTime_;
     double timeStep_;
-
-    // Callbacks
-    SimEventCallback onStartCallback_;
-    SimEventCallback onPauseCallback_;
-    SimEventCallback onResumeCallback_;
-    SimEventCallback onStopCallback_;
-    SimEventCallback onResetCallback_;
-
-    // Auto update thread
-    volatile bool autoUpdate_;
-    volatile bool running_;
-    std::thread updateThread_;
-
-    // Config
+    double timeScale_;
     bool verbose_;
 
-    // Entity storage
-    std::map<VehicleID, Entity> entities_;
+    std::unordered_map<VehicleID, EntityExt, VehicleIDHash> entities_;
     std::atomic<int> nextVehicleId_;
 
-    // Script managers
-    std::unordered_map<std::string, std::shared_ptr<scripting::EntityScriptManager>> entityScriptManagers_;
-    BT::BehaviorTreeFactory* btFactory_;
+    std::function<void()> onStartCallback_;
+    std::function<void()> onPauseCallback_;
+    std::function<void()> onResumeCallback_;
+    std::function<void()> onStopCallback_;
+    std::function<void()> onResetCallback_;
 
-    // Script update
-    void updateScripts(double deltaTime);
-    double scriptUpdateAccumulator_;
-    static constexpr double SCRIPT_UPDATE_INTERVAL = 0.5; // 500ms
+    bool running_;
+    bool paused_;
+
+    BT::BehaviorTreeFactory* btFactory_;
+    std::unordered_map<std::string, std::shared_ptr<scripting::EntityScriptManager>> entityScriptManagers_;
 };
 
 #endif // MOCK_SIM_CONTROLLER_H
