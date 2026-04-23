@@ -1,11 +1,9 @@
 # 行为树节点模块
 
 set(BT_NODES_SOURCES
-    EntityMovement.cpp
-    MoveToPoint.cpp
     AsyncMoveToPoint.cpp
-    FollowPath.cpp
     CheckEntityExists.cpp
+    SelectTargetFromList.cpp
     BehaviorTreeExecutor.cpp
     BehaviorTreeScheduler.cpp
 )

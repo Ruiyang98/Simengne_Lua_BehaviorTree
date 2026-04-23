@@ -1,9 +1,8 @@
 #include "behaviortree/BehaviorTreeExecutor.h"
 #include "behaviortree/SimControllerPtr.h"
-#include "behaviortree/MoveToPoint.h"
 #include "behaviortree/AsyncMoveToPoint.h"
-#include "behaviortree/FollowPath.h"
 #include "behaviortree/CheckEntityExists.h"
+#include "behaviortree/SelectTargetFromList.h"
 #include "behaviortree/BehaviorTreeScheduler.h"
 #include <iostream>
 #include <fstream>
@@ -60,23 +59,19 @@ bool BehaviorTreeExecutor::initialize() {
 }
 
 void BehaviorTreeExecutor::registerNodes() {
-    // Register MoveToPoint node (sync)
-    factory_.registerNodeType<MoveToPoint>("MoveToPoint");
-
     // Register AsyncMoveToPoint node (async)
     factory_.registerNodeType<AsyncMoveToPoint>("AsyncMoveToPoint");
-
-    // Register FollowPath node
-    factory_.registerNodeType<FollowPath>("FollowPath");
 
     // Register CheckEntityExists node
     factory_.registerNodeType<CheckEntityExists>("CheckEntityExists");
 
+    // Register SelectTargetFromList node (sync)
+    factory_.registerNodeType<SelectTargetFromList>("SelectTargetFromList");
+
     std::cout << "[BehaviorTreeExecutor] Registered custom nodes:" << std::endl;
-    std::cout << "  - MoveToPoint" << std::endl;
     std::cout << "  - AsyncMoveToPoint" << std::endl;
-    std::cout << "  - FollowPath" << std::endl;
     std::cout << "  - CheckEntityExists" << std::endl;
+    std::cout << "  - SelectTargetFromList" << std::endl;
 }
 
 bool BehaviorTreeExecutor::loadFromFile(const std::string& xmlFile) {

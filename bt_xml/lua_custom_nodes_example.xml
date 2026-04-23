@@ -38,8 +38,10 @@
             <!-- Lua 动作节点 -->
             <LuaAction lua_node_name="LuaCheckHealth" />
 
-            <!-- C++ 动作节点 -->
-            <MoveToPoint entity_id="{entity_id}" x="10" y="10" z="0" />
+            <!-- C++ 动作节点：选择目标 -->
+            <SelectTargetFromList targets="target1,target2,target3"
+                                  strategy="random"
+                                  selected_target="{selected_target}" />
 
             <!-- Lua 动作节点 -->
             <LuaAction lua_node_name="LuaPatrol" />

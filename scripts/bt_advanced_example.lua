@@ -166,17 +166,17 @@ local complex_xml = [[
         <Sequence name="mission_sequence">
             <!-- Check if simulation is active -->
             <LuaCondition lua_node_name="SimulationActive" />
-            
+
             <!-- Check if target entity exists -->
             <CheckEntityExists entity_id="{entity_id}" />
-            
+
             <!-- Execute smart patrol -->
             <LuaAction lua_node_name="SmartPatrol" />
-            
-            <!-- Follow predefined path -->
-            <FollowPath entity_id="{entity_id}" 
-                        waypoints="{waypoints}" 
-                        delay_ms="{delay_ms}" />
+
+            <!-- Select a target from list -->
+            <SelectTargetFromList targets="target1,target2,target3"
+                                  strategy="random"
+                                  selected_target="{selected_target}" />
         </Sequence>
     </BehaviorTree>
 </root>
