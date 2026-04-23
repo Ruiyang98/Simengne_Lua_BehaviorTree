@@ -49,31 +49,6 @@ bool BehaviorTreeScheduler::registerEntityWithTree(const std::string& entityId,
     return registerEntityWithTreeAndInterval(entityId, treeName, std::move(tree), 0, blackboard);
 }
 
-bool BehaviorTreeScheduler::registerEntity(const std::string& entityId) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    // Check if entity already exists
-    if (entities_.find(entityId) != entities_.end()) {
-        lastError_ = "Entity already registered: " + entityId;
-        return false;
-    }
-
-    auto info = std::make_shared<ScheduledTreeInfo>();
-    info->treeId = "";
-    info->treeName = "";
-    info->entityId = entityId;
-    info->lastStatus = BT::NodeStatus::IDLE;
-    info->isRunning = false;
-    info->paused = false;
-    info->tickCount = 0;
-    info->tickIntervalMs = 0;
-
-    entities_[entityId] = info;
-
-    std::cout << "[BehaviorTreeScheduler] Registered entity: " << entityId << " (no tree)" << std::endl;
-    return true;
-}
-
 bool BehaviorTreeScheduler::registerEntityWithTreeAndInterval(const std::string& entityId,
                                                                const std::string& treeName,
                                                                BT::Tree&& tree,
@@ -287,18 +262,6 @@ void BehaviorTreeScheduler::tickTree(const std::shared_ptr<ScheduledTreeInfo>& i
                 break;
         }
         std::cout << " (ticks: " << info->tickCount << ")" << std::endl;
-    }
-}
-
-void BehaviorTreeScheduler::cleanupCompletedTrees() {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    for (auto it = entities_.begin(); it != entities_.end();) {
-        if (!it->second->isRunning && it->second->lastStatus != BT::NodeStatus::RUNNING) {
-            it = entities_.erase(it);
-        } else {
-            ++it;
-        }
     }
 }
 

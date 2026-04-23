@@ -40,13 +40,9 @@ public:
     bool loadFromText(const std::string& xmlText);
     
     // Execute behavior tree
-    BT::NodeStatus execute(const std::string& treeName = "MainTree", 
+    BT::NodeStatus execute(const std::string& treeName = "MainTree",
                            BT::Blackboard::Ptr blackboard = nullptr);
-    
-    // Execute with tree ID return
-    std::string executeWithId(const std::string& treeName = "MainTree",
-                              BT::Blackboard::Ptr blackboard = nullptr);
-    
+
     // Get tree blackboard
     BT::Blackboard::Ptr getBlackboard(const std::string& treeId);
     
@@ -64,9 +60,6 @@ public:
     
     // Get factory (for advanced configuration)
     BT::BehaviorTreeFactory& getFactory() { return factory_; }
-    
-    // Get tree info (for Lua bridge integration)
-    std::shared_ptr<TreeExecutionInfo> getTreeInfo(const std::string& treeId);
 
     // ==================== Async Execution with Global Scheduler ====================
 
@@ -79,14 +72,7 @@ public:
     bool executeAsync(const std::string& entityId,
                       const std::string& treeName = "MainTree",
                       BT::Blackboard::Ptr blackboard = nullptr,
-                      int tickIntervalMs = 100);
-
-    // Execute behavior tree asynchronously with custom tick interval
-    // tickIntervalMs: this parameter is reserved but ignored (scheduler uses fixed 500ms)
-    bool executeAsyncWithInterval(const std::string& entityId,
-                                  const std::string& treeName = "MainTree",
-                                  BT::Blackboard::Ptr blackboard = nullptr,
-                                  int tickIntervalMs = 0);
+                      int tickIntervalMs = 0);
 
     // Stop an async behavior tree for entity
     bool stopAsync(const std::string& entityId);

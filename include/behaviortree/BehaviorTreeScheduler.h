@@ -66,10 +66,6 @@ public:
                                  BT::Tree&& tree,
                                  std::shared_ptr<BT::Blackboard> blackboard = nullptr);
 
-    // Register an entity without a behavior tree (reserve entity slot)
-    // Returns true on success, false on failure
-    bool registerEntity(const std::string& entityId);
-
     // Register an entity with a custom tick interval
     // tickIntervalMs: tick interval for this instance (milliseconds), 0 means use global default
     bool registerEntityWithTreeAndInterval(const std::string& entityId,
@@ -135,9 +131,6 @@ private:
 
     // Tick a single entity's tree
     void tickTree(const std::shared_ptr<ScheduledTreeInfo>& info);
-
-    // Clean up completed trees (optional, can be called periodically)
-    void cleanupCompletedTrees();
 };
 
 } // namespace behaviortree

@@ -158,70 +158,6 @@ BT::NodeStatus BehaviorTreeExecutor::execute(const std::string& treeName,
     }
 }
 
-std::string BehaviorTreeExecutor::executeWithId(const std::string& treeName,
-                                                 BT::Blackboard::Ptr blackboard) {
-    if (!initialized_) {
-        lastError_ = "Executor not initialized";
-        return "";
-    }
-    
-    try {
-        // If no blackboard provided, create a default one
-        if (!blackboard) {
-            blackboard = BT::Blackboard::create();
-        }
-        
-        // Generate tree ID
-        std::string treeId = generateTreeId();
-        
-        // Create behavior tree
-        auto tree = factory_.createTree(treeName, blackboard);
-        
-        // Store tree info
-        auto info = std::make_shared<TreeExecutionInfo>();
-        info->treeId = treeId;
-        info->treeName = treeName;
-        info->tree = std::move(tree);
-        info->isRunning = true;
-        
-        std::cout << "[BehaviorTreeExecutor] Executing behavior tree: " << treeName 
-                  << " (ID: " << treeId << ")" << std::endl;
-        
-        // Execute behavior tree
-        info->lastStatus = info->tree.tickRoot();
-        info->isRunning = (info->lastStatus == BT::NodeStatus::RUNNING);
-        
-        std::cout << "[BehaviorTreeExecutor] Behavior tree finished with status: ";
-        switch (info->lastStatus) {
-            case BT::NodeStatus::SUCCESS:
-                std::cout << "SUCCESS";
-                break;
-            case BT::NodeStatus::FAILURE:
-                std::cout << "FAILURE";
-                break;
-            case BT::NodeStatus::RUNNING:
-                std::cout << "RUNNING";
-                break;
-            default:
-                std::cout << "UNKNOWN";
-                break;
-        }
-        std::cout << std::endl;
-        
-        // Store in active trees
-        {
-            std::lock_guard<std::mutex> lock(treesMutex_);
-            activeTrees_[treeId] = info;
-        }
-        
-        return treeId;
-    } catch (const std::exception& e) {
-        lastError_ = std::string("Failed to execute behavior tree: ") + e.what();
-        std::cerr << "[BehaviorTreeExecutor] Error: " << lastError_ << std::endl;
-        return "";
-    }
-}
-
 BT::Blackboard::Ptr BehaviorTreeExecutor::getBlackboard(const std::string& treeId) {
     std::lock_guard<std::mutex> lock(treesMutex_);
     auto it = activeTrees_.find(treeId);
@@ -261,15 +197,6 @@ bool BehaviorTreeExecutor::hasTree(const std::string& treeId) const {
     return activeTrees_.find(treeId) != activeTrees_.end();
 }
 
-std::shared_ptr<TreeExecutionInfo> BehaviorTreeExecutor::getTreeInfo(const std::string& treeId) {
-    std::lock_guard<std::mutex> lock(treesMutex_);
-    auto it = activeTrees_.find(treeId);
-    if (it == activeTrees_.end()) {
-        return nullptr;
-    }
-    return it->second;
-}
-
 std::string BehaviorTreeExecutor::generateTreeId() {
     std::stringstream ss;
     ss << "bt_" << ++treeIdCounter_;
@@ -282,14 +209,6 @@ bool BehaviorTreeExecutor::executeAsync(const std::string& entityId,
                                         const std::string& treeName,
                                         BT::Blackboard::Ptr blackboard,
                                         int tickIntervalMs) {
-    // Delegate to executeAsyncWithInterval, tickIntervalMs is ignored (scheduler uses fixed 500ms)
-    return executeAsyncWithInterval(entityId, treeName, blackboard, tickIntervalMs);
-}
-
-bool BehaviorTreeExecutor::executeAsyncWithInterval(const std::string& entityId,
-                                                    const std::string& treeName,
-                                                    BT::Blackboard::Ptr blackboard,
-                                                    int tickIntervalMs) {
     if (!initialized_) {
         lastError_ = "Executor not initialized";
         return false;
