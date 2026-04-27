@@ -33,6 +33,22 @@ target_link_libraries(external_scheduler_example PRIVATE
     bt_nodes
 )
 
+# 创建C++修改脚本参数示例程序
+add_executable(cpp_modify_script_params_example examples/cpp_modify_script_params_example.cpp)
+target_link_libraries(cpp_modify_script_params_example PRIVATE
+    simulation
+    script_system
+    bt_nodes
+)
+
+# 创建避障示例程序
+add_executable(obstacle_avoidance_example examples/obstacle_avoidance_example.cpp)
+target_link_libraries(obstacle_avoidance_example PRIVATE
+    simulation
+    script_system
+    bt_nodes
+)
+
 # 链接 Lua
 # link_lua(my_app)
 

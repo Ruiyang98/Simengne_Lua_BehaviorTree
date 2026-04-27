@@ -75,6 +75,21 @@ public:
     // Get last error message
     const std::string& getLastError() const { return lastError_; }
     
+    // ========== C++ Interface for Modifying Script Parameters ==========
+    
+    // Set/Get script state parameter (accessed in Lua via state.xxx)
+    void setScriptParam(const std::string& scriptName, const std::string& key, sol::object value);
+    sol::optional<sol::object> getScriptParam(const std::string& scriptName, const std::string& key);
+    
+    // Set/Get waypoints for a script (convenience function, sets state.waypoints)
+    void setScriptWaypoints(const std::string& scriptName, 
+                            const std::vector<std::tuple<double, double, double>>& waypoints);
+    std::vector<std::tuple<double, double, double>> getScriptWaypoints(const std::string& scriptName);
+    
+    // Set/Get entity table field (visible to all scripts, accessed via entity.xxx)
+    void setEntityField(const std::string& key, sol::object value);
+    sol::object getEntityField(const std::string& key);
+    
 private:
     std::string entityId_;
     sol::state* luaState_;  // Pointer to global Lua state from singleton

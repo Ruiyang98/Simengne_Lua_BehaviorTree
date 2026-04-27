@@ -240,4 +240,100 @@ void EntityScriptManager::clearScriptState(const std::string& scriptName) {
     }
 }
 
+// ========== C++ Interface Implementation for Modifying Script Parameters ==========
+
+void EntityScriptManager::setScriptParam(const std::string& scriptName, 
+                                          const std::string& key, 
+                                          sol::object value) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = scriptStates_.find(scriptName);
+    if (it != scriptStates_.end()) {
+        it->second[key] = value;
+    }
+}
+
+sol::optional<sol::object> EntityScriptManager::getScriptParam(
+    const std::string& scriptName, 
+    const std::string& key) {
+    
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = scriptStates_.find(scriptName);
+    if (it != scriptStates_.end()) {
+        if (it->second[key].valid()) {
+            return it->second[key];
+        }
+    }
+    return sol::nullopt;
+}
+
+void EntityScriptManager::setScriptWaypoints(
+    const std::string& scriptName,
+    const std::vector<std::tuple<double, double, double>>& waypoints) {
+    
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    auto it = scriptStates_.find(scriptName);
+    if (it == scriptStates_.end()) {
+        lastError_ = "Script not found: " + scriptName;
+        return;
+    }
+    
+    sol::table wpTable = luaState_->create_table();
+    for (size_t i = 0; i < waypoints.size(); ++i) {
+        sol::table point = luaState_->create_table();
+        point["x"] = std::get<0>(waypoints[i]);
+        point["y"] = std::get<1>(waypoints[i]);
+        point["z"] = std::get<2>(waypoints[i]);
+        wpTable[i + 1] = point; // Lua array is 1-indexed
+    }
+    
+    it->second["waypoints"] = wpTable;
+}
+
+std::vector<std::tuple<double, double, double>> EntityScriptManager::getScriptWaypoints(
+    const std::string& scriptName) {
+    
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<std::tuple<double, double, double>> result;
+    
+    auto it = scriptStates_.find(scriptName);
+    if (it == scriptStates_.end()) {
+        return result;
+    }
+    
+    sol::table waypoints = it->second["waypoints"];
+    if (!waypoints.valid()) {
+        return result;
+    }
+    
+    // Lua array is 1-indexed
+    for (size_t i = 1; ; ++i) {
+        sol::table point = waypoints[i];
+        if (!point.valid()) {
+            break;
+        }
+        double x = point["x"].get_or(0.0);
+        double y = point["y"].get_or(0.0);
+        double z = point["z"].get_or(0.0);
+        result.emplace_back(x, y, z);
+    }
+    
+    return result;
+}
+
+void EntityScriptManager::setEntityField(const std::string& key, sol::object value) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    entityTable_[key] = value;
+}
+
+sol::object EntityScriptManager::getEntityField(const std::string& key) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (entityTable_[key].valid()) {
+        return entityTable_[key];
+    }
+    return sol::nil;
+}
+
 } // namespace scripting

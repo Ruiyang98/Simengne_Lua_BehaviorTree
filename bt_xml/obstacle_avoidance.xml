@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+<root main_tree_to_execute="ObstacleAvoidanceTree">
+
+    <!--
+        Obstacle Avoidance Behavior Tree
+        
+        Logic:
+        1. Check if there is an obstacle ahead
+           - If YES: Avoid obstacle by moving 90 degrees for a distance
+        2. Check if there is a user-defined path
+           - If YES: Follow the user path
+        3. If nothing to do: Idle
+        
+        Usage:
+        - Set entity_id in blackboard
+        - Set user_path in blackboard (format: "x1,y1;x2,y2;x3,y3")
+        - The tree will automatically handle obstacle avoidance
+    -->
+
+    <BehaviorTree ID="ObstacleAvoidanceTree">
+        <Fallback name="main_fallback">
+            
+            <!-- Priority 1: Avoid obstacle if present -->
+            <Sequence name="avoid_obstacle_sequence">
+                <LuaCondition lua_node_name="HasObstacle" 
+                              entity_id="{entity_id}" 
+                              check_distance="5.0"
+                              check_angle="90.0"/>
+                <LuaStatefulAction lua_node_name="AvoidObstacle" 
+                                   entity_id="{entity_id}" 
+                                   avoid_distance="3.0"/>
+            </Sequence>
+            
+            <!-- Priority 2: Follow user path if available -->
+            <Sequence name="follow_path_sequence">
+                <LuaCondition lua_node_name="HasUserPath" 
+                              entity_id="{entity_id}"/>
+                <LuaStatefulAction lua_node_name="FollowUserPath" 
+                                   entity_id="{entity_id}"/>
+            </Sequence>
+            
+            <!-- Priority 3: Idle when nothing to do -->
+            <LuaAction lua_node_name="Idle" 
+                       entity_id="{entity_id}"/>
+                       
+        </Fallback>
+    </BehaviorTree>
+
+    <!--
+        Alternative tree with reactive sequence
+        This version checks for obstacles on every tick during path following
+    -->
+    <BehaviorTree ID="ObstacleAvoidanceReactiveTree">
+        <ReactiveSequence name="reactive_main_sequence">
+            
+            <!-- Always check for obstacles first (reactive) -->
+            <Fallback name="obstacle_check_fallback">
+                <Inverter>
+                    <LuaCondition lua_node_name="HasObstacle" 
+                                  entity_id="{entity_id}" 
+                                  check_distance="5.0"/>
+                </Inverter>
+                <LuaStatefulAction lua_node_name="AvoidObstacle" 
+                                   entity_id="{entity_id}" 
+                                   avoid_distance="3.0"/>
+            </Fallback>
+            
+            <!-- Then execute main behavior -->
+            <Fallback name="main_behavior_fallback">
+                <Sequence name="follow_path_sequence">
+                    <LuaCondition lua_node_name="HasUserPath" 
+                                  entity_id="{entity_id}"/>
+                    <LuaStatefulAction lua_node_name="FollowUserPath" 
+                                       entity_id="{entity_id}"/>
+                </Sequence>
+                <LuaAction lua_node_name="Idle" 
+                           entity_id="{entity_id}"/>
+            </Fallback>
+            
+        </ReactiveSequence>
+    </BehaviorTree>
+
+    <!--
+        Simple tree for testing obstacle avoidance only
+    -->
+    <BehaviorTree ID="ObstacleAvoidanceOnlyTree">
+        <Sequence name="avoid_only_sequence">
+            <LuaCondition lua_node_name="HasObstacle" 
+                          entity_id="{entity_id}" 
+                          check_distance="5.0"/>
+            <LuaStatefulAction lua_node_name="AvoidObstacle" 
+                               entity_id="{entity_id}" 
+                               avoid_distance="3.0"/>
+        </Sequence>
+    </BehaviorTree>
+
+    <!--
+        Simple tree for testing path following only
+    -->
+    <BehaviorTree ID="FollowPathOnlyTree">
+        <Fallback name="follow_only_fallback">
+            <Sequence name="follow_path_sequence">
+                <LuaCondition lua_node_name="HasUserPath" 
+                              entity_id="{entity_id}"/>
+                <LuaStatefulAction lua_node_name="FollowUserPath" 
+                                   entity_id="{entity_id}"/>
+            </Sequence>
+            <LuaAction lua_node_name="Idle" 
+                       entity_id="{entity_id}"/>
+        </Fallback>
+    </BehaviorTree>
+
+</root>
