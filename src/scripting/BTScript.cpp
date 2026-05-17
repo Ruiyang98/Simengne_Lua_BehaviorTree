@@ -38,23 +38,26 @@ BTScript::~BTScript() {
 
 bool BTScript::initializeScript(const std::string& scriptCode) {
     try {
-        // Execute script in global environment to define execute function
-        auto result = luaState_->script(scriptCode);
-        
+        // Create isolated environment for this script to avoid global namespace pollution
+        sol::environment env(*luaState_, sol::new_table(), luaState_->globals());
+
+        // Execute script in isolated environment
+        auto result = luaState_->script(scriptCode, env);
+
         if (!result.valid()) {
             sol::error err = result;
             std::cerr << "[BTScript] Error executing script '" << name_ << "': " << err.what() << std::endl;
             return false;
         }
-        
-        // Get execute function from global environment
-        executeFunc_ = (*luaState_)["execute"];
-        
+
+        // Get execute function from isolated environment
+        executeFunc_ = env["execute"];
+
         if (!executeFunc_.valid()) {
             std::cerr << "[BTScript] No 'execute' function found in script: " << name_ << std::endl;
             return false;
         }
-        
+
         return true;
     } catch (const std::exception& e) {
         std::cerr << "[BTScript] Error initializing script '" << name_ << "': " << e.what() << std::endl;

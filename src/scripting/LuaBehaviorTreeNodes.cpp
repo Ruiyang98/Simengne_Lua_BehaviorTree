@@ -89,6 +89,12 @@ BT::NodeStatus LuaActionNode::tick() {
 
 void LuaActionNode::setLuaFunction(const std::string& nodeName, sol::protected_function func) {
     std::lock_guard<std::mutex> lock(mutex_);
+    // Check if already registered to avoid overwriting
+    auto existing = luaFunctions_.find(nodeName);
+    if (existing != luaFunctions_.end()) {
+        std::cout << "[LuaActionNode] Warning: Node '" << nodeName << "' already registered, skipping re-registration" << std::endl;
+        return;
+    }
     luaFunctions_[nodeName] = func;
 }
 
@@ -179,6 +185,12 @@ BT::NodeStatus LuaConditionNode::tick() {
 
 void LuaConditionNode::setLuaFunction(const std::string& nodeName, sol::protected_function func) {
     std::lock_guard<std::mutex> lock(mutex_);
+    // Check if already registered to avoid overwriting
+    auto existing = luaFunctions_.find(nodeName);
+    if (existing != luaFunctions_.end()) {
+        std::cout << "[LuaConditionNode] Warning: Node '" << nodeName << "' already registered, skipping re-registration" << std::endl;
+        return;
+    }
     luaFunctions_[nodeName] = func;
 }
 
@@ -365,6 +377,12 @@ void LuaStatefulActionNode::setLuaFunctions(const std::string& nodeName,
                                              sol::protected_function onRunning,
                                              sol::protected_function onHalted) {
     std::lock_guard<std::mutex> lock(mutex_);
+    // Check if already registered to avoid overwriting
+    auto existing = luaFunctions_.find(nodeName);
+    if (existing != luaFunctions_.end()) {
+        std::cout << "[LuaStatefulActionNode] Warning: Node '" << nodeName << "' already registered, skipping re-registration" << std::endl;
+        return;
+    }
     luaFunctions_[nodeName] = std::make_tuple(onStart, onRunning, onHalted);
 }
 

@@ -2,7 +2,19 @@
 -- 全局行为树节点注册中心
 -- 采用单个注册方式，直观显示每个节点的逻辑
 
+-- 防止重复加载：如果已经加载过，直接返回已存在的模块
+if package.loaded["bt_nodes_registry"] then
+    print("[BT Nodes Registry] Already loaded, skipping re-registration")
+    return package.loaded["bt_nodes_registry"]
+end
+
 print("[BT Nodes Registry] Starting node registration...")
+
+-- 创建模块表
+local M = {}
+
+-- 标记为已加载
+package.loaded["bt_nodes_registry"] = M
 
 -- ============================================
 -- 移动相关动作节点
@@ -821,3 +833,6 @@ print("  [OK] FollowUserPath registered")
 
 print("[BT Nodes Registry] All nodes registered successfully!")
 print("")
+
+-- 返回模块表
+return M
